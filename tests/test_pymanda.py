@@ -141,7 +141,7 @@ def test_3Corp(cd_psa):
                    'z_0.9' : [3,7,10]}
     
     assert answer_dict==psa_dict
-    
+
 def test_1corp(cd_psa):
     '''Estimate the 1 Corporation in the psa data with default parameters'''
     psa_dict = cd_psa.estimate_psa(['x'])
@@ -187,3 +187,143 @@ def test_BadSeries(cd_psa, psa_data):
     with pytest.raises(TypeError):
         cd_psa.restrict_data(flag_series)
 
+# Tests for calculate shares
+def dictionary_comparison(dict1, dict2):
+    if len(dict1.keys()) == 0 or len(dict2.keys()) == 0:
+        raise ValueError("Comparisons have 0 Keys")
+    
+    matches = []
+    if dict1.keys == dict2.keys:
+        for key in dict1.keys:
+            matches.append(dict1[key].equals(dict2[key])) 
+    
+    return all(matches)
+
+def test_BaseShares(cd_psa):
+    test_shares = cd_psa.calculate_shares()
+    actual_shares = {'Base Shares': pd.DataFrame({'corporation':['x', 'x', 'y', 'y', 'z'],
+                                                   'choice': ['a', 'b', 'c', 'd', 'e'],
+                                                   'share': [.3, .2, .2, .05, .25]})}
+    
+    assert dictionary_comparison(test_shares, actual_shares)
+    
+def test_PsaShares(cd_psa):
+    psa_test = {'x_0.75': [1,2,3]}
+    test_shares = cd_psa.calculate_shares(psa_test)
+    
+    actual_shares = {'x_0.75': pd.DataFrame({'corporation': ['x', 'x', 'y', 'y', 'z'],
+                                            'choice': ['a', 'b', 'c', 'd', 'e'],
+                                            'share': [x / 46 for x in [30, 8, 1,3, 4]]})}
+    
+    assert dictionary_comparison(test_shares, actual_shares)
+
+#test for calculating HHI shares
+@pytest.fixture
+def base_shares():
+    base_shares = pd.DataFrame({'corporation':['x', 'x', 'y', 'y', 'z'],
+                                'choice': ['a', 'b', 'c', 'd', 'e'],
+                                'share': [.3, .2, .2, .05, .25]})
+    return base_shares
+
+@pytest.fixture
+def base_hhi():
+    base_hhi = [3750.0] 
+    return base_hhi
+    
+@pytest.fixture
+def psa_shares():
+    psa_shares = pd.DataFrame({'corporation': ['x', 'x', 'y', 'y', 'z'],
+                                'choice': ['a', 'b', 'c', 'd', 'e'],
+                                'share': [x / 46 for x in [30, 8, 1,3, 4]]})
+    return psa_shares
+
+@pytest.fixture
+def psa_hhi():
+    psa_hhi = 479347578744499 / 68719476736 # approximately 6975.43
+    return psa_hhi
+
+def test_HHIs(cd_psa, base_shares, psa_shares, base_hhi, psa_hhi):
+    share_tables = {'Base Shares': base_shares,
+                    'x_0.75': psa_shares}
+    
+    test_hhis = cd_psa.calculate_hhi(share_tables)
+    
+    actual_hhis = {'Base Shares': base_hhi,
+                  'x_0.75': psa_hhi} 
+    
+    assert test_hhis == actual_hhis
+    
+def test_HHI_sharecol(cd_psa, base_shares, psa_shares, base_hhi):
+    df_alt = base_shares
+    df_alt['other shares'] = df_alt['share']
+    df_alt = df_alt.drop(columns="share")
+    
+    share_tables = {'Base Shares': df_alt}
+    
+    test_hhis = cd_psa.calculate_hhi(share_tables, share_col="other shares")
+    
+    actual_hhis = {'Base Shares': base_hhi}
+    
+    assert test_hhis == actual_hhis
+    
+def test_HHI_BadSharecol(cd_psa, base_shares, psa_shares):
+    df_alt = psa_shares
+    df_alt['other shares'] = df_alt['share']
+    df_alt = df_alt.drop(columns="share")
+    
+    share_tables = {'Base Shares': base_shares,
+                'x_0.75': df_alt}
+    
+    with pytest.raises(KeyError):
+        cd_psa.calculate_hhi(share_tables)
+
+def test_HHI_BadInput(cd_psa):
+    with pytest.raises(TypeError):
+        cd_psa.calculate_hhi(cd_psa.data)
+
+# test for calculating changes in HHI
+def test_HHIChange(cd_psa, base_shares, psa_shares, base_hhi, psa_hhi):
+    share_dict = {'Base Shares': base_shares,
+                  'x_0.75': psa_shares}
+    test_change = cd_psa.hhi_change(['y', 'z'], share_dict)
+    
+    actual_change = {'Base Shares': [base_hhi, 5000, 1250],
+                     'x_0.75' : [psa_hhi, 7835839010804385 / 1099511627776, 166277750892401 / 1099511627776]} # approximately 7126.66 post and 151.23 change
+    
+    assert test_change == actual_change
+
+def test_HHIChange_TransCol(cd_psa, base_shares):
+    share_dict = {"Base Shares": base_shares}
+    
+    test_change = cd_psa.hhi_change(['d', 'e'], share_dict, trans_var="choice")
+    
+    actual_change = {'Base Shares': [2350, 2600, 250]}
+    
+    assert test_change==actual_change
+    
+def test_HHIChange_MultipleTrans(cd_psa, base_shares):
+    share_dict = {"Base Shares": base_shares}
+    
+    test_change = cd_psa.hhi_change(['c', 'd', 'e'], share_dict, trans_var="choice")
+    
+    actual_change = {'Base Shares': [2350, 3800, 1450]}
+    
+    assert test_change==actual_change
+
+def test_HHIChange_BadList(cd_psa, base_shares):
+    share_dict = {"Base Shares": base_shares}
+    
+    with pytest.raises(ValueError):
+        cd_psa.hhi_change(['c', 'd', 'e'], share_dict)
+
+def test_HHIChange_NotList(cd_psa, base_shares):
+    share_dict = {"Base Shares": base_shares}
+
+    with pytest.raises(TypeError):
+        cd_psa.hhi_change('x', share_dict)
+    
+def test_HHIChange_BadTransCol(cd_psa, base_shares):
+    share_dict = {"Base Shares": base_shares}
+
+    with pytest.raises(KeyError):
+        cd_psa.hhi_change(['c', 'd'], share_dict, trans_var='systen')
