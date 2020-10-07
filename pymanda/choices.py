@@ -764,7 +764,7 @@ class DiscreteChoice():
         
         return div_shares
     
-    def wtp_change(self, choice_probs, trans_list):
+    def wtp_change(self, cd, choice_probs, trans_list):
         '''
         Calculate the change in Willingness to Pay (WTP) for a combined entity
         given a DataFrame of predictions
@@ -796,8 +796,16 @@ class DiscreteChoice():
                 raise KeyError ('''{} is not a choice in choice_probs'''.format(tran))
 
         wtp_df = choice_probs[trans_list].copy()
+        
         wtp_df['combined'] = wtp_df.sum(axis=1)
         
+        if cd.wght_var is not None:
+            cols = wtp_df.columns
+            wtp_df['wght'] = cd.data[cd.wght_var]
+            for c in cols:
+                wtp_df[c] = wtp_df[c] * wtp_df['wght']
+            wtp_df = wtp_df.drop(columns=['wght'])
+            
         if (wtp_df==1).any().any():
             warnings.warn('''A diversion probability for a bin equals 1 which will result in infinite WTP.''' , RuntimeWarning)
         
