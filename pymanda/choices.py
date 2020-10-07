@@ -593,27 +593,34 @@ class DiscreteChoice():
 
         # currently only supports 'semiparametric' solver. Added solvers should use elif statement
         if self.solver=='semiparametric':
+            
             X = cd.data[self.coef_order + [choice]].copy()
-                    
+            
+            if cd.wght_var is not None:
+                X['wght'] = cd.data[cd.wght_var]
+            else:
+                X['wght'] = 1
+                
             ## group observations
             X['grouped'] = False
             X['group'] = ""
-            for i in range(3, len(self.coef_order)+3):
+            for i in range(4, len(self.coef_order)+4):
                 bin_by_cols = X.columns[0:-i].to_list()
                 if self.verbose:
                     print(bin_by_cols)
                 
-                screen = X[~X['grouped']].groupby(bin_by_cols).agg({bin_by_cols[0]:['count']})
+                screen = X[~X['grouped']].groupby(bin_by_cols).agg({'wght':['sum']})
+                    
                 screen = (screen >= self.min_bin)
                 screen.columns = screen.columns.droplevel(0)
                 
                 X = pd.merge(X, screen, how='left', left_on=bin_by_cols,right_index=True)
-                X['count'] = X['count'].fillna(True)
+                X['sum'] = X['sum'].fillna(True)
                 # update grouped and group
-                X['group'] = np.where((~X['grouped']) & (X['count']),
+                X['group'] = np.where((~X['grouped']) & (X['sum']),
                                       X[bin_by_cols].astype(str).agg('\b'.join,axis=1), X['group'])
-                X['grouped'] = X['grouped'] | X['count']
-                X = X.drop('count', axis=1) 
+                X['grouped'] = X['grouped'] | X['sum']
+                X = X.drop('sum', axis=1) 
                 
             # group ungroupables
             X.loc[X['group']=="",'group'] = "ungrouped"
