@@ -391,6 +391,74 @@ def semi_cd():
     return semi_cd
 
 @pytest.fixture
+def semi_cd_wght():
+    choice = ['a' for x in range(56)] # scaled by .1
+    choice += ['b' for z in range(110)] # scaled by .5
+    choice += ['c' for x in range(440)] # scaled by 2
+    
+    #choice a
+    x1 = [0 for x in range(22)]
+    x1 += [1 for x in range(34)]
+    
+    x2 = [0 for x in range(20)]
+    x2 += [1 for x in range(2)]
+    x2 += [0 for x in range(12)]
+    x2 += [1 for x in range(22)]
+    
+
+    x3 = [2 for x in range(20)]
+    x3 += [0 for x in range(12)]
+    x3 += [2 for x in range(2)]
+    x3 += [0 for x in range(10)]
+    x3 += [1 for x in range(10)]
+    x3 += [2 for x in range(2)]
+    
+    wght= [10 for x in range(56)]
+    
+    #choice b
+    x1 += [0 for x in range(70)]
+    x1 += [1 for x in range(40)]
+
+    
+    x2 += [0 for x in range(30)]
+    x2 += [1 for x in range(40)]
+    x2 += [0 for x in range(20)]
+    x2 += [1 for x in range(20)]
+    
+    x3 += [0 for x in range(10)]
+    x3 += [2 for x in range(20)]
+    x3 += [1 for x in range(20)]
+    x3 += [2 for x in range(20)]
+    x3 += [0 for x in range(20)]
+    x3 += [1 for x in range(20)]
+    
+    wght += [2 for x in range(110)]
+    
+    # choice c
+    x1 += [0 for x in range(280)]
+    x1 += [1 for x in range(160)]
+
+    x2 += [0 for x in range(240)]
+    x2 += [1 for x in range(200)]
+
+    x3 += [1 for x in range(40)]
+    x3 += [2 for x in range(200)]
+    x3 += [1 for x in range(40)]
+    x3 += [0 for x in range(80)]
+    x3 += [1 for x in range(80)]
+    
+    wght += [.5 for x in range(440)]
+    
+    semi_df_weight = pd.DataFrame({'choice': choice,
+                            'x1': x1,
+                            'x3': x3,
+                            'x2': x2,
+                            'weight': wght})
+    semi_cd_wght = ChoiceData(semi_df_weight, 'choice', wght_var='weight')
+
+    return semi_cd_wght
+
+@pytest.fixture
 def semi_cd_corp(semi_cd):
     df= semi_cd.data.copy()
     df['corp'] = df['choice']
@@ -424,6 +492,12 @@ def test_DC_semiparam_fit(semi_dc, semi_cd, semi_div):
     
     assert test.equals(semi_div)
 
+def test_DC_semiparam_fit_weight(semi_dc, semi_cd_wght, semi_div):
+    semi_dc.fit(semi_cd_wght)
+    test = semi_dc.coef_.round(decimals=4)
+    
+    assert test.equals(semi_div)
+
 def test_DC_semiparam_fit_minbin(semi_cd):
     dc = DiscreteChoice(solver='semiparametric', coef_order = ['x1', 'x2', 'x3'], min_bin=50)
     dc.fit(semi_cd)
@@ -437,7 +511,7 @@ def test_DC_semiparam_fit_minbin(semi_cd):
     
     assert test.equals(actual)
     
-    
+#tests for predict()    
 def test_DC_semiparam_predict(semi_dc, semi_cd, semi_div):
     
     semi_dc.fit(semi_cd)
@@ -457,7 +531,26 @@ def test_DC_semiparam_predict(semi_dc, semi_cd, semi_div):
     
     assert test.round(decimals=4).equals(actual)
     
+def test_DC_semiparam_predict_wght(semi_dc, semi_cd_wght, semi_div):
     
+    semi_dc.fit(semi_cd_wght)
+    test = semi_dc.predict(semi_cd_wght)
+
+    actual = semi_cd_wght.data.copy()
+    actual['group'] = actual[['x1', 'x2', 'x3']].astype(str).agg('\b'.join,axis=1)
+    actual = actual.drop(columns=['x1', 'x2','x3', 'choice'])
+    actual['group'] = actual['group'].str.replace('0\b1\b0', 'ungrouped')
+    actual['group'] = actual['group'].str.replace('0\b0\b0', '0\b0')
+    actual['group'] = actual['group'].str.replace('0\b0\b1', '0\b0')
+    actual['group'] = actual['group'].str.replace('1\b0\b2', '1')
+    actual['group'] = actual['group'].str.replace('1\b1\b2', '1')
+
+    actual = actual.merge(semi_div, how='left', on='group')
+    actual = actual.drop(columns=['group', 'weight'])
+    
+    assert test.round(decimals=4).equals(actual)
+
+#tests for diversions    
 def test_DC_semiparm_diversion(semi_dc, semi_cd):
     
     semi_dc.fit(semi_cd)
@@ -471,7 +564,21 @@ def test_DC_semiparm_diversion(semi_dc, semi_cd):
                           index = ['a', 'b', 'c'])
     
     assert test.round(decimals=4).equals(actual)
-
+    
+def test_DC_semiparm_diversion_wght(semi_dc, semi_cd_wght):
+    
+    semi_dc.fit(semi_cd_wght)
+    
+    choice_probs = semi_dc.predict(semi_cd_wght)  
+    test = semi_dc.diversion(semi_cd_wght, choice_probs, div_choices=['a', 'b', 'c'])
+    
+    actual = pd.DataFrame({'a': [np.NaN, .4143, .5857],
+                           'b': [.5291, np.NaN, .4709],
+                           'c': [.6905, .3095, np.NaN]},
+                          index = ['a', 'b', 'c'])
+    
+    assert test.round(decimals=4).equals(actual)
+    
 def test_DC_semiparm_diversion_2choice(semi_dc, semi_cd):
     
     semi_dc.fit(semi_cd)
@@ -526,6 +633,21 @@ def test_wtpchange(semi_cd):
                           'wtp_change': [.3116]})
     
     assert test.round(decimals=4).equals(actual)
+
+def test_wtpchange_wght(semi_cd_wght):
+    semi_dc = DiscreteChoice(solver='semiparametric', coef_order = ['x1', 'x2', 'x3'], min_bin=180)
+
+    semi_dc.fit(semi_cd_wght)
+    choice_probs = semi_dc.predict(semi_cd_wght)  
+    
+    test = semi_dc.wtp_change(semi_cd_wght, choice_probs, ['a', 'b'])
+    
+    actual = pd.DataFrame({'a': [912.6297],
+                          'b': [287.4548],
+                          'combined': [1574.0460],
+                          'wtp_change': [.3116]})
+    
+    assert test.round(decimals=4).equals(actual)
     
 def test_wtpchange_warning(semi_cd, semi_dc):
     semi_dc.fit(semi_cd)
@@ -565,6 +687,28 @@ def test_upp(semi_cd, semi_dc):
         'margin': .5}
     
     test = semi_dc.upp(semi_cd, upp_dict1, upp_dict2, div_shares)
+    
+    actual = pd.DataFrame({'upp_a': .1036,
+                          'upp_b': .2646,
+                          'avg_upp': .1490},
+                          index = [0])
+    assert test.round(decimals=4).equals(actual)
+
+def test_upp_wght(semi_cd_wght, semi_dc):
+    semi_dc.fit(semi_cd_wght)
+    choice_probs = semi_dc.predict(semi_cd_wght)
+    
+    div_shares = semi_dc.diversion(semi_cd_wght, choice_probs, div_choices=['a', 'b'])
+    
+    upp_dict1 = {'name': 'a',
+            'price' : 100,
+            'margin': .25}
+    
+    upp_dict2 = {'name': 'b',
+        'price' : 50,
+        'margin': .5}
+    
+    test = semi_dc.upp(semi_cd_wght, upp_dict1, upp_dict2, div_shares)
     
     actual = pd.DataFrame({'upp_a': .1036,
                           'upp_b': .2646,

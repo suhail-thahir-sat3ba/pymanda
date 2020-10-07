@@ -626,7 +626,7 @@ class DiscreteChoice():
             X.loc[X['group']=="",'group'] = "ungrouped"
             
             # converts from observations to group descriptions
-            X = X[[choice] + ['group', 'grouped']].pivot_table(index='group', columns=choice, aggfunc='count', fill_value=0)
+            X = X[[choice] + ['group', 'wght']].pivot_table(index='group', columns=choice, aggfunc='sum', fill_value=0)
             
             #convert from counts to shares
             X['rowsum'] = X.sum(axis=1)
@@ -799,6 +799,13 @@ class DiscreteChoice():
         
         wtp_df['combined'] = wtp_df.sum(axis=1)
         
+
+        if (wtp_df==1).any().any():
+            warnings.warn('''A diversion probability for a bin equals 1 which will result in infinite WTP.''' , RuntimeWarning)
+        
+        with warnings.catch_warnings(record = True): # prevents redundant warning for np.log(0)
+            wtp_df = -1 * np.log(1- wtp_df) # -1 * ln(1-prob)
+        
         if cd.wght_var is not None:
             cols = wtp_df.columns
             wtp_df['wght'] = cd.data[cd.wght_var]
@@ -806,12 +813,6 @@ class DiscreteChoice():
                 wtp_df[c] = wtp_df[c] * wtp_df['wght']
             wtp_df = wtp_df.drop(columns=['wght'])
             
-        if (wtp_df==1).any().any():
-            warnings.warn('''A diversion probability for a bin equals 1 which will result in infinite WTP.''' , RuntimeWarning)
-        
-        with warnings.catch_warnings(record = True): # prevents redundant warning for np.log(0)
-            wtp_df = -1 * np.log(1- wtp_df) # -1 * ln(1-prob)
-        
         wtp_df = wtp_df.sum().to_frame().transpose()
         
         wtp_df['wtp_change'] = (wtp_df['combined'] - wtp_df[trans_list].sum(axis = 1)) /  wtp_df[trans_list].sum(axis = 1)
