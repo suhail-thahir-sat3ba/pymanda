@@ -733,7 +733,12 @@ class DiscreteChoice():
         for c in all_choices:
             if c not in choice_probs.columns:
                 raise KeyError ('''{} is not a column in choice_probs'''.format(c))
-            
+        
+        if cd.wght_var is not None:
+            choice_probs['wght'] = cd.data[cd.wght_var]
+        else:
+            choice_probs['wght'] = 1
+        
         div_shares = pd.DataFrame(index=all_choices)
         for diversion in div_choices:
             if div_choices_var is None and cd.corp_var != cd.choice_var:
@@ -746,11 +751,11 @@ class DiscreteChoice():
             all_choice_temp = all_choices.copy()
             all_choice_temp = [x for x in all_choice_temp if x not in div_list]
             
-            df = df[all_choice_temp]
-            df['rowsum'] = df.sum(axis=1)
+            df = df[all_choice_temp + ['wght']]
+            df['rowsum'] = df[all_choice_temp].sum(axis=1)
             for x in all_choice_temp:
-                df[x] = df[x] / df['rowsum']
-            df = df.drop(columns=['rowsum'])
+                df[x] = df[x] / df['rowsum'] * df['wght']
+            df = df.drop(columns=['rowsum', 'wght'])
             df = df.sum()
             df = df / df.sum()
 
