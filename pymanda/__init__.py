@@ -1,1 +1,1 @@
-from .choices import ChoiceData
+from .choices import ChoiceData, DiscreteChoice

@@ -1,5 +1,7 @@
+# import pymanda
 import pandas as pd
 import numpy as np
+from sklearn.preprocessing import LabelBinarizer
 
 """
 ChoiceData
@@ -79,8 +81,30 @@ class ChoiceData():
         for nonull in [choice_var, corp_var]:
             if len(data[data['choice'] == ''].index) != 0:
                 raise ValueError ('''{} has missing values'''.format(nonull))
+     
+    def corp_map(self):
+        """
+        Utility fuction to map corporation and choices in self.data
+
+        Raises
+        ------
+        RuntimeError
+            When self.corp_var is not different than choice_var.
+
+        Returns
+        -------
+        corp_map : pandas.core.frame.DataFrame
+            2 column data frame with corporation name and choice names.
+
+        """
+        if self.corp_var == self.choice_var:
+            raise RuntimeError('''corp_map should only be called when self.corp_var is defined and different than self.choice_var''')
+        corp_map = self.data.groupby([self.corp_var, self.choice_var]).count()
+        corp_map = corp_map.reset_index()
+        corp_map = corp_map[[self.corp_var, self.choice_var]]
         
-        
+        return corp_map
+    
     def estimate_psa(self, centers, threshold=[.75, .9]):
         """
         Return a dictionary idenftifying geographies in a choice's Primary 
@@ -450,3 +474,280 @@ class ChoiceData():
             
         return output_dict
       
+
+class DiscreteChoice():
+    """
+    
+    DiscreteChoice
+    ---------
+    A solver for estimating discrete choice models and post-estimation analysis.     
+
+    Parameters
+    ----------
+    cd : object of class ChoiceData
+   
+    solver: str of solver to use
+   
+    copy_x: Bool whether to create copies of data in calculations
+        Default is True
+    
+    coef_order: list of columns in ChoiceData
+        coefficient order used for solver 'semiparametric'
+    
+    verbose: Boolean for Verbosity in solvers
+        Default is False
+    
+    min_bin: numeric
+        Minimum bin size used for solver 'semiparametric'
+    
+    Examples
+    --------
+    
+    DiscreteChoice(solver='semiparametric', coef_order = ['x1', 'x2', 'x3'])
+
+    """
+    def __init__(
+        self,
+        solver='semiperametric', 
+        copy_x=True,
+        coef_order= None,
+        verbose= False,
+        min_bin= 25):
+        
+        self.params = {'solver' : solver,
+                       'copy_x' : True,
+                       'coef_order' : coef_order,
+                       'verbose': verbose,
+                       'min_bin': min_bin}
+        
+        self.solver = solver
+        self.copy_x = copy_x
+        self.coef_order = coef_order
+        self.verbose = verbose
+        self.min_bin = min_bin
+        
+        current_solvers = ['semiparametric']
+        if solver not in current_solvers:
+            raise ValueError ('''{a} is not supported solver. Solvers currently supported are {b}'''.format(a=solver, b=current_solvers))
+        
+        if type(copy_x) is not bool:
+            raise ValueError ('''{} is not bool type.'''.format(copy_x))
+        
+        if type(coef_order) != list:
+            raise ValueError ('''coef_order expected to be list. got {}'''.format(type(coef_order)))
+        if len(coef_order) ==0:
+            raise ValueError ('''coef_order must be a non-empty list''')
+        
+        if type(verbose) is not bool:
+            raise ValueError ('''{} is not bool type.'''.format(verbose))
+        
+        if type(min_bin) != float and type(min_bin) != int:
+            raise ValueError('''min_bin must be a numeric value greater than 0''')
+        if min_bin <= 0:
+            raise ValueError('''min_bin must be greater than 0''') 
+    
+    def check_is_fitted(self):
+        """
+        Verify that an Instance has been fitted
+
+        Returns
+        -------
+        None.
+        
+        Raises
+        ------
+        RuntimeError
+            If instance is not fitted.
+
+        """
+        
+        try:
+            self.coef_
+        except AttributeError:
+            raise RuntimeError('''Instance of DiscreteChoice is not fitted''')
+            
+        
+    
+    def fit(self, cd, use_corp=False):
+        """
+        Fit Estimator using ChoiceData and specified solver
+
+        Parameters
+        ----------
+        cd : pymanda.ChoiceData Object
+            Contains data to be fitted using DiscreteChoice
+
+        """
+        
+        # if type(cd) !=  pymanda.ChoiceData:
+        #     raise TypeError ('''Expected type pymanda.choices.ChoiceData Got {}'''.format(type(cd)))
+            
+        for coef in self.coef_order:
+            if coef not in cd.data.columns:
+                raise KeyError ('''{} is not a column in ChoiceData'''.format(coef))
+                
+        if use_corp:
+            choice= cd.corp_var
+        else:
+            choice= cd.choice_var
+            
+        # currently only supports 'semiparametric' solver. Added solvers should use elif statement
+        if self.solver=='semiparametric':
+            X = cd.data[self.coef_order + [choice]].copy()
+                    
+            ## group observations
+            X['grouped'] = False
+            X['group'] = ""
+            for i in range(3, len(self.coef_order)+3):
+                bin_by_cols = X.columns[0:-i].to_list()
+                if self.verbose:
+                    print(bin_by_cols)
+                
+                screen = X[~X['grouped']].groupby(bin_by_cols).agg({bin_by_cols[0]:['count']})
+                screen = (screen >= self.min_bin)
+                screen.columns = screen.columns.droplevel(0)
+                
+                X = pd.merge(X, screen, how='left', left_on=bin_by_cols,right_index=True)
+                X['count'] = X['count'].fillna(True)
+                # update grouped and group
+                X['group'] = np.where((~X['grouped']) & (X['count']),
+                                      X[bin_by_cols].astype(str).agg('\b'.join,axis=1), X['group'])
+                X['grouped'] = X['grouped'] | X['count']
+                X = X.drop('count', axis=1) 
+                
+            # group ungroupables
+            X.loc[X['group']=="",'group'] = "ungrouped"
+            
+            # converts from observations to group descriptions
+            X = X[[choice] + ['group', 'grouped']].pivot_table(index='group', columns=choice, aggfunc='count', fill_value=0)
+            
+            #convert from counts to shares
+            X['rowsum'] = X.sum(axis=1)
+            for x in X.columns:
+                X[x] = X[x] / X['rowsum']
+            X = X.drop('rowsum', axis=1)
+            X.columns = [col[1] for col in X.columns]
+            X= X.reset_index()
+            
+            self.coef_ = X
+    
+    def predict(self, cd):
+        """
+        Use Estimated model to predict individual choice
+
+        Parameters
+        ----------
+        cd : ChoiceData
+            ChoiceData to be predicted on.
+
+        Returns
+        -------
+        choice_probs : pandas.core.frame.DataFrame
+            Dataframe of predictions for each choice.
+            When solver ='semiparametric', each row contains probabilities of 
+            going to any of the choices.
+
+        """
+        # if type(cd) !=  pymanda.ChoiceData:
+        #     raise TypeError ('''Expected type pymanda.choices.ChoiceData Got {}'''.format(type(cd)))
+        
+        self.check_is_fitted()
+        
+        if self.solver == 'semiparametric':
+            
+            #group based on groups
+            X = cd.data[self.coef_order].copy()
+            X['group'] = ""
+            for n in range(len(self.coef_order)):
+                X['g'] = X[self.coef_order[:len(self.coef_order) - n]].astype(str).agg('\b'.join,axis=1)
+                X['group'] = np.where((X['g'].isin(self.coef_['group'])) & (X['group'] == ""),
+                                      X['g'],
+                                      X['group'])
+            
+            X.loc[X['group']=="",'group'] = "ungrouped"
+            X = X['group']
+            
+            choice_probs = pd.merge(X, self.coef_, how='left', on='group')
+            choice_probs = choice_probs.drop(columns=['group'])            
+            
+        
+        return choice_probs
+
+    def diversion(self, cd, choice_probs, div_choices, div_choices_var=None):
+        '''
+        Calculate diversions given a DataFrame of observations with diversion
+        probabilities
+
+        Parameters
+        ----------
+        cd: pymanda.ChoiceData
+            ChoiceData to calculate diversions on.
+
+        choice_probs : pandas.core.frame.DataFrame
+            DataFrame of observations with diversion probabilities.
+            
+        div_choices : list
+            list of choices to calculate diversions for.
+
+        Returns
+        -------
+        div_shares : pandas.core.frame.DataFrame
+            Columns are name of choice being diverted, 
+            rows are shares of diversion.
+
+        '''
+        # if type(cd) !=  pymanda.ChoiceData:
+        #     raise TypeError ('''Expected type pymanda.choices.ChoiceData Got {}'''.format(type(cd)))
+        
+        if type(div_choices) != list and div_choices is not None:
+            raise TypeError('''choices is expected to be list. Got {}'''.format(type(div_choices)))
+        if len(div_choices) == 0:
+            raise ValueError ('''choices must have atleast a length of 1''')
+            
+        if type(choice_probs) != pd.core.frame.DataFrame:
+            raise TypeError ('''Expected Type pandas.core.frame.DataFrame. Got {}'''.format(type(choice_probs)))
+        
+        if div_choices_var is None:
+            choice = cd.choice_var
+            if cd.corp_var != cd.choice_var:
+                corp_map = cd.corp_map()
+        elif div_choices_var not in cd.data.columns:
+            raise KeyError("""div_choices_var not in cd.data""")
+        else:
+            choice = div_choices_var
+                    
+        if len(choice_probs) != len(cd.data):
+            raise ValueError('''length of choice_probs and cd.data should be the same''')
+            
+        choice_probs['choice'] = cd.data[choice]
+        
+        all_choices = list(choice_probs['choice'].unique())
+            
+        for c in all_choices:
+            if c not in choice_probs.columns:
+                raise KeyError ('''{} is not a column in choice_probs'''.format(c))
+            
+        div_shares = pd.DataFrame(index=all_choices)
+        for diversion in div_choices:
+            if div_choices_var is None and cd.corp_var != cd.choice_var:
+                div_list = list(corp_map[corp_map[cd.corp_var].isin([diversion])][cd.choice_var])
+            else:
+                div_list = [diversion]
+                
+            df = choice_probs[choice_probs['choice'].isin(div_list)].copy()
+            
+            all_choice_temp = all_choices.copy()
+            all_choice_temp = [x for x in all_choice_temp if x not in div_list]
+            
+            df = df[all_choice_temp]
+            df['rowsum'] = df.sum(axis=1)
+            for x in all_choice_temp:
+                df[x] = df[x] / df['rowsum']
+            df = df.drop(columns=['rowsum'])
+            df = df.sum()
+            df = df / df.sum()
+
+            df.name = diversion
+            div_shares = div_shares.merge(df, how='left', left_index=True, right_index=True)    
+        
+        return div_shares
