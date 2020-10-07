@@ -461,6 +461,7 @@ def test_DC_semiparam_predict(semi_dc, semi_cd, semi_div):
 def test_DC_semiparm_diversion(semi_dc, semi_cd):
     
     semi_dc.fit(semi_cd)
+    
     choice_probs = semi_dc.predict(semi_cd)  
     test = semi_dc.diversion(semi_cd, choice_probs, div_choices=['a', 'b', 'c'])
     
@@ -474,6 +475,7 @@ def test_DC_semiparm_diversion(semi_dc, semi_cd):
 def test_DC_semiparm_diversion_2choice(semi_dc, semi_cd):
     
     semi_dc.fit(semi_cd)
+    
     choice_probs = semi_dc.predict(semi_cd)  
     test = semi_dc.diversion(semi_cd, choice_probs, div_choices=['a', 'b'])
     
@@ -508,6 +510,42 @@ def test_DC_semiparam_fit_div_shares_col(semi_dc, semi_cd_corp):
                           index = ['u', 'v', 'w', 'x', 'y', 'z'])
     
     assert test.round(decimals=4).equals(actual)  
-
-
     
+# tests for wtp_change()
+def test_wtpchange(semi_cd):
+    semi_dc = DiscreteChoice(solver='semiparametric', coef_order = ['x1', 'x2', 'x3'], min_bin=180)
+
+    semi_dc.fit(semi_cd)
+    y_hat = semi_dc.predict(semi_cd)  
+    
+    test = semi_dc.wtp_change(y_hat, ['a', 'b'])
+    
+    actual = pd.DataFrame({'a': [912.6297],
+                          'b': [287.4548],
+                          'combined': [1574.0460],
+                          'wtp_change': [.3116]})
+    
+    assert test.round(decimals=4).equals(actual)
+    
+def test_wtpchange_warning(semi_cd, semi_dc):
+    semi_dc.fit(semi_cd)
+    y_hat = semi_dc.predict(semi_cd)  
+    
+    with pytest.warns(RuntimeWarning) as record:
+        semi_dc.wtp_change(y_hat, ['a', 'b'])
+    
+    assert len(record) == 1
+    
+def test_wtpchange_warning_results(semi_cd, semi_dc):
+    semi_dc.fit(semi_cd)
+    y_hat = semi_dc.predict(semi_cd)  
+    
+    with pytest.warns(RuntimeWarning):
+        test = semi_dc.wtp_change(y_hat, ['a', 'b'])
+    
+    actual = pd.DataFrame({'a': [np.inf],
+                          'b': [np.inf],
+                          'combined': [np.inf],
+                          'wtp_change': [np.NaN]})
+    assert test.equals(actual)
+        

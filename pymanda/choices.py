@@ -2,6 +2,8 @@
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelBinarizer
+import warnings
+
 
 """
 ChoiceData
@@ -565,8 +567,6 @@ class DiscreteChoice():
             self.coef_
         except AttributeError:
             raise RuntimeError('''Instance of DiscreteChoice is not fitted''')
-            
-        
     
     def fit(self, cd, use_corp=False):
         """
@@ -590,7 +590,7 @@ class DiscreteChoice():
             choice= cd.corp_var
         else:
             choice= cd.choice_var
-            
+
         # currently only supports 'semiparametric' solver. Added solvers should use elif statement
         if self.solver=='semiparametric':
             X = cd.data[self.coef_order + [choice]].copy()
@@ -650,7 +650,7 @@ class DiscreteChoice():
         """
         # if type(cd) !=  pymanda.ChoiceData:
         #     raise TypeError ('''Expected type pymanda.choices.ChoiceData Got {}'''.format(type(cd)))
-        
+
         self.check_is_fitted()
         
         if self.solver == 'semiparametric':
@@ -751,3 +751,50 @@ class DiscreteChoice():
             div_shares = div_shares.merge(df, how='left', left_index=True, right_index=True)    
         
         return div_shares
+    
+    def wtp_change(self, choice_probs, trans_list):
+        '''
+        Calculate the change in Willingness to Pay (WTP) for a combined entity
+        given a DataFrame of predictions
+
+        Parameters
+        ----------
+        trans_list: list
+            List of choices to calculate WTP change on
+
+        choice_probs : pandas.core.frame.DataFrame
+            DataFrame of observations with diversion probabilities.
+
+        Returns
+        -------
+        wtp_df : pandas.core.frame.DataFrame
+            1 row dataframe with columns showing individual WTP of elements 
+            in trans_list and wtp of a combined entity
+
+        '''
+        
+        if type(trans_list) != list:
+            raise TypeError ('''trans_list expected type list. got {}'''.format(type(trans_list)))
+        
+        if len(trans_list) < 2:
+            raise ValueError ('''trans_list needs atleast 2 choices''')
+        
+        for tran in trans_list:
+            if tran not in choice_probs.columns:
+                raise KeyError ('''{} is not a choice in choice_probs'''.format(tran))
+        
+
+        wtp_df = choice_probs[trans_list].copy()
+        wtp_df['combined'] = wtp_df.sum(axis=1)
+        
+        if (wtp_df==1).any().any():
+            warnings.warn('''A diversion probability for a bin equals 1 which will result in infinite WTP.''' , RuntimeWarning)
+        
+        with warnings.catch_warnings(record = True): # prevents redundant warning for np.log(0)
+            wtp_df = -1 * np.log(1- wtp_df) # -1 * ln(1-prob)
+        
+        wtp_df = wtp_df.sum().to_frame().transpose()
+        
+        wtp_df['wtp_change'] = (wtp_df['combined'] - wtp_df[trans_list].sum(axis = 1)) /  wtp_df[trans_list].sum(axis = 1)
+    
+        return wtp_df
