@@ -548,4 +548,48 @@ def test_wtpchange_warning_results(semi_cd, semi_dc):
                           'combined': [np.inf],
                           'wtp_change': [np.NaN]})
     assert test.equals(actual)
-        
+    
+#tests for DiscreteChoice.upp
+def test_upp(semi_cd, semi_dc):
+    semi_dc.fit(semi_cd)
+    choice_probs = semi_dc.predict(semi_cd)
+    
+    div_shares = semi_dc.diversion(semi_cd, choice_probs, div_choices=['a', 'b'])
+    
+    upp_dict1 = {'name': 'a',
+            'price' : 100,
+            'margin': .25}
+    
+    upp_dict2 = {'name': 'b',
+        'price' : 50,
+        'margin': .5}
+    
+    test = semi_dc.upp(semi_cd, upp_dict1, upp_dict2, div_shares)
+    
+    actual = pd.DataFrame({'upp_a': .1036,
+                          'upp_b': .2646,
+                          'avg_upp': .1490},
+                          index = [0])
+    assert test.round(decimals=4).equals(actual)
+
+def test_upp_corp(semi_cd_corp, semi_dc):
+    semi_dc.fit(semi_cd_corp)
+    choice_probs = semi_dc.predict(semi_cd_corp)
+    
+    div_shares = semi_dc.diversion(semi_cd_corp, choice_probs, div_choices=['a', 'b'])
+    
+    upp_dict1 = {'name': 'a',
+            'price' : 100,
+            'margin': .25}
+    
+    upp_dict2 = {'name': 'b',
+        'price' : 50,
+        'margin': .5}
+    
+    test = semi_dc.upp(semi_cd_corp, upp_dict1, upp_dict2, div_shares)
+    
+    actual = pd.DataFrame({'upp_a': .1036,
+                          'upp_b': .2646,
+                          'avg_upp': .1490},
+                          index = [0])
+    assert test.round(decimals=4).equals(actual)

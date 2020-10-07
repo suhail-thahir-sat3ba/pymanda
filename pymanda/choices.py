@@ -782,7 +782,6 @@ class DiscreteChoice():
         for tran in trans_list:
             if tran not in choice_probs.columns:
                 raise KeyError ('''{} is not a choice in choice_probs'''.format(tran))
-        
 
         wtp_df = choice_probs[trans_list].copy()
         wtp_df['combined'] = wtp_df.sum(axis=1)
@@ -797,4 +796,84 @@ class DiscreteChoice():
         
         wtp_df['wtp_change'] = (wtp_df['combined'] - wtp_df[trans_list].sum(axis = 1)) /  wtp_df[trans_list].sum(axis = 1)
     
-        return wtp_df
+        return wtp_df        
+    
+    def upp(self, cd, upp_dict1, upp_dict2, div_shares):
+        """
+        Calculate Upward Pricing Pressure (UPP)  using estimated diversions for
+        2 choices
+
+        Parameters
+        ----------
+        cd : pymanda.ChoiceData
+            ChoiceData corresponding to div_shares.
+        upp_dict1 : dict
+            Dictionary containing data for necessary UPP calculations.
+                'name': name of choice. Always looks at cd.corp_var
+                'price': Average corp price
+                'margin': Corp margins
+        upp_dict2 : dict
+            Dictionary containing data for necessary UPP calculations.
+                'name': name of choice. Always looks at cd.corp_var
+                'price': Average corp price
+                'margin': Corp margins
+        div_shares : pandas.core.frame.DataFrame
+            Diversion shares for choices in upp_dict.
+
+        Returns
+        -------
+        upp : pandas.core.frame.DataFrame
+            Dataframe showing the UPP for each choice and average upp.
+
+        """
+        # if type(cd) !=  pymanda.ChoiceData:
+        #     raise TypeError ('''Expected type pymanda.choices.ChoiceData Got {}'''.format(type(cd)))
+        
+        expected_keys = ['name', 'price', 'margin']
+        msg = '''upp_dict is expected to have only the following keys: {}'''.format(expected_keys)
+        for d in [upp_dict1, upp_dict2]:
+            if type(d) != dict:
+                raise TypeError('''upp_dict is expected to be type dict. Got {}'''.format(type(d)))
+            
+            if len(d.keys()) != len(expected_keys):
+                raise ValueError(msg)
+            for key in d.keys():
+                if key not in expected_keys:
+                    raise KeyError(msg)
+            
+                if d['name'] not in list(cd.data[cd.corp_var]):
+                    raise KeyError('''{name} is not a choice in ChoiceData column {col}'''.format(name=d['name'], col=cd.data[cd.corp_var]))
+                              
+                if type(d['price']) not in [int, float]:
+                    raise TypeError(''' 'price' is expected to be numeric. Got {}'''.format(type(d['price'])))
+                
+                if type(d['margin']) not in [int, float]:
+                    raise TypeError(''' 'margin' is expected to be numeric. Got {}'''.format(type(d['margin'])))
+        
+        if type(div_shares) != pd.core.frame.DataFrame:
+            raise TypeError('''div_shares expected to be type pandas.core.frame.DataFrame. Got {}'''.format(type(div_shares)))
+        
+        if cd.corp_var != cd.choice_var:
+            corp_map = cd.corp_map()
+            index_keep1 = list(corp_map[corp_map[cd.corp_var] == upp_dict1['name']]['choice'])
+            index_keep2 = list(corp_map[corp_map[cd.corp_var] == upp_dict2['name']]['choice'])
+        else:
+            index_keep1 = [upp_dict1['name']]
+            index_keep2 = [upp_dict2['name']]
+
+        div1_to_2 = div_shares[upp_dict1['name']][div_shares.index.isin(index_keep2)].sum()
+        div2_to_1 = div_shares[upp_dict2['name']][div_shares.index.isin(index_keep1)].sum()
+        
+        upp1 = div1_to_2 * upp_dict2['margin'] * upp_dict2['price'] / upp_dict1['price']
+        upp2 = div2_to_1 * upp_dict1['margin'] * upp_dict1['price'] / upp_dict2['price']        
+
+        obs1 = cd.data[cd.corp_var][cd.data[cd.corp_var] == upp_dict1['name']].count()
+        obs2 = cd.data[cd.corp_var][cd.data[cd.corp_var] == upp_dict2['name']].count()
+
+        avg_upp = (upp1 * obs1  + upp2 * obs2) / (obs1 + obs2)
+        
+        upp = pd.DataFrame({'upp_{}'.format(upp_dict1['name']): upp1,
+                            'upp_{}'.format(upp_dict2['name']): upp2,
+                            'avg_upp': avg_upp}, index = [0])
+        
+        return upp
