@@ -886,10 +886,14 @@ class DiscreteChoice():
         
         upp1 = div1_to_2 * upp_dict2['margin'] * upp_dict2['price'] / upp_dict1['price']
         upp2 = div2_to_1 * upp_dict1['margin'] * upp_dict1['price'] / upp_dict2['price']        
-
-        obs1 = cd.data[cd.corp_var][cd.data[cd.corp_var] == upp_dict1['name']].count()
-        obs2 = cd.data[cd.corp_var][cd.data[cd.corp_var] == upp_dict2['name']].count()
-
+        
+        if cd.wght_var is not None:
+            obs1 = cd.data[cd.wght_var][cd.data[cd.corp_var] == upp_dict1['name']].sum()
+            obs2 = cd.data[cd.wght_var][cd.data[cd.corp_var] == upp_dict2['name']].sum()
+        else:
+            obs1 = cd.data[cd.corp_var][cd.data[cd.corp_var] == upp_dict1['name']].count()
+            obs2 = cd.data[cd.corp_var][cd.data[cd.corp_var] == upp_dict2['name']].count()
+            
         avg_upp = (upp1 * obs1  + upp2 * obs2) / (obs1 + obs2)
         
         upp = pd.DataFrame({'upp_{}'.format(upp_dict1['name']): upp1,
