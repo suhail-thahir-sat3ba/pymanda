@@ -3,6 +3,7 @@ from pymanda import ChoiceData, DiscreteChoice
 import pandas as pd
 import numpy as np
 
+
 @pytest.fixture
 def psa_data():
     '''create data for psa analysis'''
