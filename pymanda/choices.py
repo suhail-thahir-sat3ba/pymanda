@@ -1,7 +1,6 @@
-# import pymanda
+import pymanda
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import LabelBinarizer
 import warnings
 
 
@@ -13,6 +12,7 @@ acquisitions analyses
 
 """
 class ChoiceData():
+    
     """
      Two-dimensional, size-mutable, potentially heterogeneous tabular data.
     
@@ -27,7 +27,6 @@ class ChoiceData():
      Parameters
      ----------
      data : Non-Empty pandas.core.frame.DataFrame object
-    
      choice_var : String of Column Name
          Column name that identifies the "choice" of each customer  
      corp_var : String of Column Name, default None
@@ -88,11 +87,6 @@ class ChoiceData():
         """
         Utility fuction to map corporation and choices in self.data
 
-        Raises
-        ------
-        RuntimeError
-            When self.corp_var is not different than choice_var.
-
         Returns
         -------
         corp_map : pandas.core.frame.DataFrame
@@ -121,13 +115,15 @@ class ChoiceData():
         ----------
         centers: List of choices to find 
             
-        threshold : float or list of floats, default [.75, .9]
+        threshold : float or list of floats, 
             Threshold or levels of thresholds to find the PSA for each choice 
-            in centers
+            in centers. Default calculates 75% and 90% PSAs.
 
         Returns
         -------
         Dictionary
+            Dictionary keys are labeled as "{center}_{threshold}" and 
+            values are a list of geographies falling within the threshold
         
         Examples
         --------
@@ -196,7 +192,9 @@ class ChoiceData():
         return output_dict
         
     def restriction_checks(self, restriction):
-        """checks for custom restrictions"""
+        """
+        Checks for custom restrictions
+        """
         
         if type(restriction) != pd.core.series.Series:
             raise TypeError ("Expected type pandas.core.series.Series. Got {}".format(type(restriction)))
@@ -210,7 +208,7 @@ class ChoiceData():
         
         Parameters
         ----------
-        restriction: pandas.core.series.Series with Boolean Date Type
+        restriction: pandas.core.series.Series with dtyoe=Boolean
             Boolean series identifying which rows to keep given a restriction
         
         Examples
@@ -265,10 +263,13 @@ class ChoiceData():
             dictionary of lists that contain values to be kept in self.geog_var
             If None, calculates shares for full data.
             
-        weight_var : Column Name in self.data to use as weight
-            If None, treats every observation as 1
+        weight_var : str, Optional
+            Column Name in self.data to use as weight. Default is None, 
+            weighting every observation equally
         
-        restriction: optional restriction to be applied to data before calculating shares
+        restriction: pandas.core.series.Series with dtyoe=Boolean
+            Optional restriction to be applied to data before calculating 
+            shares
 
         Returns
         -------
@@ -349,7 +350,20 @@ class ChoiceData():
         return output_dict
     
     def shares_checks(self, df, share_col, data="Data"):
-        """ Checks for share columns"""
+        """
+        Checks for columns that are supposed to contain shares
+
+        Parameters
+        ----------
+        df : pandas.core.frame.DataFrame()
+            Dataframe containing share_col
+        share_col : str
+            Name of column in data frame to chekc.
+        data : str, optional
+            Name of parameter being checked for Error Message.
+            The default is "Data".
+
+        """
         
         if share_col not in df.columns:
             raise KeyError("Column '{}' not in ChoiceData".format(share_col))
@@ -423,25 +437,25 @@ class ChoiceData():
     
     def hhi_change(self, trans_list, shares, trans_var=None, share_col="share"):
         """
-        calculates change in hhis
+        Calculates change in Herfindahl-Hirschman Index (HHI) from combining 
+        a set of choices.
 
         Parameters
         ----------
-        trans_list : list of objects in trans_var
-            list of entities that will be combined for calculating combined hhi.
-        shares : dict of pandas.DataFrames
-            dictionary of objects with dataframes of shares.
-        trans_var : column in dataframe, optional
+        trans_list : list
+            list of choices that will be combined for calculating combined hhi.
+        shares : dict
+            dictoinary of dataframes of shares to calculate HHIs on.
+        trans_var : str, optional
             Column name containging objects in trans_list. The default (None) 
             uses self.corp_var.
-        share_col : column in dataframe, optional
-            Column name containing values of share. The default is None which 
-            looks for column labeled "share".
+        share_col : str, optional
+            Column name containing values of share. The default is "share".
 
         Returns
         -------
         dictionary
-            key will match shares parameter
+            key(s) will match shares parameter
             values will be a list of [pre-merge HHI, post-merge HHI, HHI change].
         """
         
@@ -482,24 +496,19 @@ class DiscreteChoice():
     
     DiscreteChoice
     ---------
-    A solver for estimating discrete choice models and post-estimation analysis.     
+    A solver for estimating discrete choice models and post-estimation 
+    analysis.     
 
     Parameters
     ----------
-    cd : object of class ChoiceData
-   
     solver: str of solver to use
-   
-    copy_x: Bool whether to create copies of data in calculations
-        Default is True
-    
-    coef_order: list of columns in ChoiceData
+    copy_x: Bool, Optional
+        whether to create copies of data in calculations. Default is True.
+    coef_order: list, Optional
         coefficient order used for solver 'semiparametric'
-    
-    verbose: Boolean for Verbosity in solvers
-        Default is False
-    
-    min_bin: numeric
+    verbose: Boolean, Optional
+        Verbosity in solvers. Default is False
+    min_bin: int or float, Optional
         Minimum bin size used for solver 'semiparametric'
     
     Examples
@@ -550,16 +559,7 @@ class DiscreteChoice():
     
     def check_is_fitted(self):
         """
-        Verify that an Instance has been fitted
-
-        Returns
-        -------
-        None.
-        
-        Raises
-        ------
-        RuntimeError
-            If instance is not fitted.
+        Check that an Instance has been fitted
 
         """
         
@@ -574,8 +574,10 @@ class DiscreteChoice():
 
         Parameters
         ----------
-        cd : pymanda.ChoiceData Object
+        cd : pymanda.ChoiceData
             Contains data to be fitted using DiscreteChoice
+        use_corp: Boolean
+            Whether to fit using corp_var as choice. Default is False.
 
         """
         
@@ -644,7 +646,7 @@ class DiscreteChoice():
 
         Parameters
         ----------
-        cd : ChoiceData
+        cd : pymanda.ChoiceData
             ChoiceData to be predicted on.
 
         Returns
@@ -765,17 +767,19 @@ class DiscreteChoice():
         return div_shares
     
     def wtp_change(self, cd, choice_probs, trans_list):
-        '''
+        """
         Calculate the change in Willingness to Pay (WTP) for a combined entity
         given a DataFrame of predictions
 
         Parameters
         ----------
-        trans_list: list
-            List of choices to calculate WTP change on
-
+        cd: pymanda.ChoiceData
+            ChoiceData corresponding to choice_probs.
         choice_probs : pandas.core.frame.DataFrame
-            DataFrame of observations with diversion probabilities.
+            DataFrame of observations with diversion probabilities 
+            corresponding to cd.
+        trans_list: list
+            List of choices to calculate WTP change on.
 
         Returns
         -------
@@ -783,7 +787,7 @@ class DiscreteChoice():
             1 row dataframe with columns showing individual WTP of elements 
             in trans_list and wtp of a combined entity
 
-        '''
+        """
         
         if type(trans_list) != list:
             raise TypeError ('''trans_list expected type list. got {}'''.format(type(trans_list)))
