@@ -593,33 +593,40 @@ class DiscreteChoice():
 
         # currently only supports 'semiparametric' solver. Added solvers should use elif statement
         if self.solver=='semiparametric':
+            
             X = cd.data[self.coef_order + [choice]].copy()
-                    
+            
+            if cd.wght_var is not None:
+                X['wght'] = cd.data[cd.wght_var]
+            else:
+                X['wght'] = 1
+                
             ## group observations
             X['grouped'] = False
             X['group'] = ""
-            for i in range(3, len(self.coef_order)+3):
+            for i in range(4, len(self.coef_order)+4):
                 bin_by_cols = X.columns[0:-i].to_list()
                 if self.verbose:
                     print(bin_by_cols)
                 
-                screen = X[~X['grouped']].groupby(bin_by_cols).agg({bin_by_cols[0]:['count']})
+                screen = X[~X['grouped']].groupby(bin_by_cols).agg({'wght':['sum']})
+                    
                 screen = (screen >= self.min_bin)
                 screen.columns = screen.columns.droplevel(0)
                 
                 X = pd.merge(X, screen, how='left', left_on=bin_by_cols,right_index=True)
-                X['count'] = X['count'].fillna(True)
+                X['sum'] = X['sum'].fillna(True)
                 # update grouped and group
-                X['group'] = np.where((~X['grouped']) & (X['count']),
+                X['group'] = np.where((~X['grouped']) & (X['sum']),
                                       X[bin_by_cols].astype(str).agg('\b'.join,axis=1), X['group'])
-                X['grouped'] = X['grouped'] | X['count']
-                X = X.drop('count', axis=1) 
+                X['grouped'] = X['grouped'] | X['sum']
+                X = X.drop('sum', axis=1) 
                 
             # group ungroupables
             X.loc[X['group']=="",'group'] = "ungrouped"
             
             # converts from observations to group descriptions
-            X = X[[choice] + ['group', 'grouped']].pivot_table(index='group', columns=choice, aggfunc='count', fill_value=0)
+            X = X[[choice] + ['group', 'wght']].pivot_table(index='group', columns=choice, aggfunc='sum', fill_value=0)
             
             #convert from counts to shares
             X['rowsum'] = X.sum(axis=1)
@@ -726,7 +733,12 @@ class DiscreteChoice():
         for c in all_choices:
             if c not in choice_probs.columns:
                 raise KeyError ('''{} is not a column in choice_probs'''.format(c))
-            
+        
+        if cd.wght_var is not None:
+            choice_probs['wght'] = cd.data[cd.wght_var]
+        else:
+            choice_probs['wght'] = 1
+        
         div_shares = pd.DataFrame(index=all_choices)
         for diversion in div_choices:
             if div_choices_var is None and cd.corp_var != cd.choice_var:
@@ -739,11 +751,11 @@ class DiscreteChoice():
             all_choice_temp = all_choices.copy()
             all_choice_temp = [x for x in all_choice_temp if x not in div_list]
             
-            df = df[all_choice_temp]
-            df['rowsum'] = df.sum(axis=1)
+            df = df[all_choice_temp + ['wght']]
+            df['rowsum'] = df[all_choice_temp].sum(axis=1)
             for x in all_choice_temp:
-                df[x] = df[x] / df['rowsum']
-            df = df.drop(columns=['rowsum'])
+                df[x] = df[x] / df['rowsum'] * df['wght']
+            df = df.drop(columns=['rowsum', 'wght'])
             df = df.sum()
             df = df / df.sum()
 
@@ -752,7 +764,7 @@ class DiscreteChoice():
         
         return div_shares
     
-    def wtp_change(self, choice_probs, trans_list):
+    def wtp_change(self, cd, choice_probs, trans_list):
         '''
         Calculate the change in Willingness to Pay (WTP) for a combined entity
         given a DataFrame of predictions
@@ -784,14 +796,23 @@ class DiscreteChoice():
                 raise KeyError ('''{} is not a choice in choice_probs'''.format(tran))
 
         wtp_df = choice_probs[trans_list].copy()
+        
         wtp_df['combined'] = wtp_df.sum(axis=1)
         
+
         if (wtp_df==1).any().any():
             warnings.warn('''A diversion probability for a bin equals 1 which will result in infinite WTP.''' , RuntimeWarning)
         
         with warnings.catch_warnings(record = True): # prevents redundant warning for np.log(0)
             wtp_df = -1 * np.log(1- wtp_df) # -1 * ln(1-prob)
         
+        if cd.wght_var is not None:
+            cols = wtp_df.columns
+            wtp_df['wght'] = cd.data[cd.wght_var]
+            for c in cols:
+                wtp_df[c] = wtp_df[c] * wtp_df['wght']
+            wtp_df = wtp_df.drop(columns=['wght'])
+            
         wtp_df = wtp_df.sum().to_frame().transpose()
         
         wtp_df['wtp_change'] = (wtp_df['combined'] - wtp_df[trans_list].sum(axis = 1)) /  wtp_df[trans_list].sum(axis = 1)
@@ -866,10 +887,14 @@ class DiscreteChoice():
         
         upp1 = div1_to_2 * upp_dict2['margin'] * upp_dict2['price'] / upp_dict1['price']
         upp2 = div2_to_1 * upp_dict1['margin'] * upp_dict1['price'] / upp_dict2['price']        
-
-        obs1 = cd.data[cd.corp_var][cd.data[cd.corp_var] == upp_dict1['name']].count()
-        obs2 = cd.data[cd.corp_var][cd.data[cd.corp_var] == upp_dict2['name']].count()
-
+        
+        if cd.wght_var is not None:
+            obs1 = cd.data[cd.wght_var][cd.data[cd.corp_var] == upp_dict1['name']].sum()
+            obs2 = cd.data[cd.wght_var][cd.data[cd.corp_var] == upp_dict2['name']].sum()
+        else:
+            obs1 = cd.data[cd.corp_var][cd.data[cd.corp_var] == upp_dict1['name']].count()
+            obs2 = cd.data[cd.corp_var][cd.data[cd.corp_var] == upp_dict2['name']].count()
+            
         avg_upp = (upp1 * obs1  + upp2 * obs2) / (obs1 + obs2)
         
         upp = pd.DataFrame({'upp_{}'.format(upp_dict1['name']): upp1,
