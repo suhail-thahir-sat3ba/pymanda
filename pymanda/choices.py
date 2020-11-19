@@ -2,6 +2,8 @@ import pymanda
 import pandas as pd
 import numpy as np
 import warnings
+from sklearn.preprocessing import OneHotEncoder 
+from statsmodels.discrete.conditional_models import ConditionalLogit
 
 
 """
@@ -435,7 +437,7 @@ class ChoiceData():
             
         return output_dict
     
-    def hhi_change(self, trans_list, shares, trans_var=None, share_col="share")
+    def hhi_change(self, trans_list, shares, trans_var=None, share_col="share"):
         """
         Calculates change in Herfindahl-Hirschman Index (HHI) from combining 
         a set of choices.
@@ -639,7 +641,73 @@ class DiscreteChoice():
             X= X.reset_index()
             
             self.coef_ = X
-    
+            
+        elif self.solver=="parametric":
+            data_vars = self.coef_order + [cd.choice_var]
+            if cd.wght_var is not None:
+                data_vars += [cd.wght_var]
+                
+            df = cd.data[data_vars]
+            
+            choices = df['choice'].unique()
+            choice_drop = choice[0] # choice to drop for regression fixed effects
+            if self.verbose:
+                print("Dropping choice {} from regression's fixed-effects".format(choice_drop))
+            
+            #expand data frame to panel data
+            df_final = pd.DataFrame()
+            
+            for choice in choices:
+                X = df[df[cd.choice_var] == choice]
+                X1 = X.copy()
+                
+                for c in [x for x in choices if x != choice]:
+                    X1[cd.choice_var] = c
+                    
+                    X = pd.concat([X1, X])
+                
+                X['obs_choice'] = np.where(X['choice']==choice,1,0)
+                
+                df_final = pd.concat([df_final, X], axis=0)
+            
+            df = df_final.reset_index()
+
+            # create choice Fixed-Effects
+            enc = OneHotEncoder(sparse=False)
+            fe = enc.fit_transform(df[[cd.choice_var]])
+            
+            fe_cols = list(enc.get_feature_names())
+            fe_cols = [x.replace("x0_", "FE_") for x in fe_cols]
+            
+            fe = pd.DataFrame(fe, columns=fe_cols)
+            fe.drop(columns=['FE_' + choice_drop], inplace=True)
+            
+            df = pd.concat([df,fe], axis=1)
+            
+            # create weighted Fixed-Effects
+            if cd.wght_var is not None:
+                wght_fe = fe * df[cd.wght_var]
+                wght_fe_cols = [x.replace("FE_", "WGHTFE_") for x in fe_cols]
+                
+                wght_fe = pd.DataFrame(wght_fe, columns=wght_fe_cols)
+                wght_fe.drop(columns="WGHTFE_" + choice_drop)
+                
+                df = pd.concat([df,wght_fe], axis=1)
+            
+            df.sort_values('index', inplace=True)
+            
+            # split engod, exog, and group
+            X = df[[x for x in df.columns if x not in ['obs_choice', 'index', cd.choice_var]]]
+            y = df['obs_choice']
+            grp = df['index']
+            
+            # create coefficients
+            model = ConditionalLogit(y, X, groups=grp)
+            res = model.fit(method='ncg') #newton, ncg
+            
+            
+            
+            
     def predict(self, cd):
         """
         Use Estimated model to predict individual choice
