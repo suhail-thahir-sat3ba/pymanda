@@ -190,6 +190,15 @@ class ChoiceData():
                 output_dict.update({"{cen}_{a}".format(cen=center, a=alpha) : in_psa})
                 
         return output_dict
+    
+    def export_psas(file_path, output_type, output_dict):
+        accepted_types  = ["csv", "excel"]
+        if output_type not in accepted_types:
+            raise KeyError("{input} is not a supported format. Valid export options are {list}".format(input=output_type, list=accepted_types))
+        
+        
+        
+        
         
     def restriction_checks(self, restriction):
         """
