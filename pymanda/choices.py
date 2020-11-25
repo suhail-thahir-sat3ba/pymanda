@@ -191,14 +191,26 @@ class ChoiceData():
                 
         return output_dict
     
-    def export_psas(file_path, output_type, output_dict):
+    def export_psas(self, file_path, output_type, output_dict):
         accepted_types  = ["csv", "excel"]
         if output_type not in accepted_types:
             raise KeyError("{input} is not a supported format. Valid export options are {list}".format(input=output_type, list=accepted_types))
         
+        output = pd.DataFrame()
+        for key in output_dict.keys():
+            psa = pd.DataFrame(index=output_dict[key])
+            psa[key] = 1
+            output = output.merge(psa, how='outer', left_index=True, right_index=True)
         
+        output = output.fillna(0)
+        output.index.name = self.geog_var
         
+        if output_type == "csv":
+            output.to_csv(file_path)
         
+        elif output_type == "excel":
+            with pd.ExcelWriter(file_path) as writer:
+                output.to_excel(writer, sheet_name="raw_plus")
         
     def restriction_checks(self, restriction):
         """
