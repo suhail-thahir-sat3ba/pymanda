@@ -192,6 +192,9 @@ class ChoiceData():
         return output_dict
     
     def _export(self, file_path, output_type, output, sheet_name=None):
+        """
+        Utility function for exporting data.
+        """
         accepted_types  = ["csv", "excel"]
         if output_type not in accepted_types:
             raise KeyError("{input} is not a supported format. Valid export options are {list}".format(input=output_type, list=accepted_types))
@@ -203,7 +206,31 @@ class ChoiceData():
             with pd.ExcelWriter(file_path) as writer:
                 output.to_excel(writer, sheet_name=sheet_name)
                  
-    def export_psas(self, file_path, output_type, output_dict, sheet_name="psas"):
+    def format_psas(self, output_dict, export=True, output_type=None, file_path=None, sheet_name="psas"):
+        """
+        Format PSA dictionaries from ChoiceData.estimate_psa() to be in 1 
+        dataframe for export
+
+        Parameters
+        ----------
+        output_dict : dict
+            Output from ChoiceData.estimate_psa().
+        export : Boolean, optional
+            Boolean to export the data. The default is True. 
+        output_type : str, optional
+            File format to export data in. The default is None.
+        file_path : str, optional
+            Destination to save output if export=True. The default is None.    
+        sheet_name : TYPE, optional
+            Optional naming parameter. Only supported for output_type="excel".
+            The default is "psas".
+
+        Returns
+        -------
+        output : pandas.core.frame.DataFrame
+            Pandas dataframe of output. Only returned when export=False.
+
+        """        
         
         output = pd.DataFrame()
         for key in output_dict.keys():
@@ -214,8 +241,12 @@ class ChoiceData():
         output = output.fillna(0)
         output.index.name = self.geog_var
         
-        self._export(file_path, output_type, output, sheet_name)
+        if export:
+            self._export(file_path, output_type, output, sheet_name)
 
+        else:
+            return output
+        
         
     def restriction_checks(self, restriction):
         """
