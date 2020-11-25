@@ -191,10 +191,19 @@ class ChoiceData():
                 
         return output_dict
     
-    def export_psas(self, file_path, output_type, output_dict):
+    def _export(self, file_path, output_type, output, sheet_name=None):
         accepted_types  = ["csv", "excel"]
         if output_type not in accepted_types:
             raise KeyError("{input} is not a supported format. Valid export options are {list}".format(input=output_type, list=accepted_types))
+           
+        if output_type == "csv":
+            output.to_csv(file_path)
+        
+        elif output_type == "excel":
+            with pd.ExcelWriter(file_path) as writer:
+                output.to_excel(writer, sheet_name=sheet_name)
+                 
+    def export_psas(self, file_path, output_type, output_dict, sheet_name="psas"):
         
         output = pd.DataFrame()
         for key in output_dict.keys():
@@ -205,12 +214,8 @@ class ChoiceData():
         output = output.fillna(0)
         output.index.name = self.geog_var
         
-        if output_type == "csv":
-            output.to_csv(file_path)
-        
-        elif output_type == "excel":
-            with pd.ExcelWriter(file_path) as writer:
-                output.to_excel(writer, sheet_name="raw_plus")
+        self._export(file_path, output_type, output, sheet_name)
+
         
     def restriction_checks(self, restriction):
         """
@@ -369,6 +374,8 @@ class ChoiceData():
             output_dict.update({key: df_shares})
 
         return output_dict
+    
+    def export_shares
     
     def shares_checks(self, df, share_col, data="Data"):
         """
