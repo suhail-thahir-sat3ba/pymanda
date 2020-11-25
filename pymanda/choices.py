@@ -405,9 +405,7 @@ class ChoiceData():
             output_dict.update({key: df_shares})
 
         return output_dict
-    
-    def export_shares
-    
+        
     def shares_checks(self, df, share_col, data="Data"):
         """
         Checks for columns that are supposed to contain shares
