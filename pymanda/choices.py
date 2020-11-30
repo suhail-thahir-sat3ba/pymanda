@@ -429,6 +429,11 @@ class ChoiceData():
         if df[share_col].sum() != 1:
             raise ValueError ("Values of '{col}' in {d} do not sum to 1".format(col=share_col, d=data))
     
+    def format_shares(output_dict, export=True, output_type=None, file_path=None):
+        
+        
+        
+    
     def calculate_hhi(self, shares_dict, share_col="share", group_col=None):
         """
         Calculates HHIs from precalculated shares at the corporation level
