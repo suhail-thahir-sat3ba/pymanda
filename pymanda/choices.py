@@ -203,8 +203,12 @@ class ChoiceData():
             output.to_csv(file_path)
         
         elif output_type == "excel":
-            with pd.ExcelWriter(file_path) as writer:
-                output.to_excel(writer, sheet_name=sheet_name)
+            with pd.ExcelWriter(file_path, mode="a", engine="openpyxl") as writer:
+                try:
+                    workbook = writer.book
+                    workbook.remove(workbook[key])
+                finally:    
+                    output.to_excel(writer, sheet_name=sheet_name)
                  
     def format_psas(self, output_dict, export=True, output_type=None, file_path=None, sheet_name="psas"):
         """
@@ -231,6 +235,9 @@ class ChoiceData():
             Pandas dataframe of output. Only returned when export=False.
 
         """        
+        
+        if type(export) != bool:
+            raise ValueError("Export parameter must be type bool")
         
         output = pd.DataFrame()
         for key in output_dict.keys():
@@ -429,11 +436,36 @@ class ChoiceData():
         if df[share_col].sum() != 1:
             raise ValueError ("Values of '{col}' in {d} do not sum to 1".format(col=share_col, d=data))
     
-    def format_shares(output_dict, export=True, output_type=None, file_path=None):
+    def format_shares(self, output_dict, export=True, output_type="excel", file_path=None):
+        """
+        Formatting options for calculate_shares() output
+
+        Parameters
+        ----------
+        output_dict : dictionary
+            Output from ChoiceData.calculate_shares().
+        export : Bool, optional
+            Boolean to export data. The default is True.
+        output_type : string, optional
+            Export file format. The default is "excel".
+        file_path : string, optional
+            Destination to export files. The default is None.
+
+        """
+        if type(export) != bool:
+            raise ValueError("Export parameter must be type bool")
+            
+        if output_type =="csv":
+            raise KeyError("'csv' is not a supported file type for exporting shares")
         
-        
-        
-    
+        if not export:
+            raise KeyError("export=False is not supported")
+        else:
+            for key in output_dict.keys():
+                output = output_dict[key]
+                self._export(file_path, output_type, output, sheet_name=key)
+
+     
     def calculate_hhi(self, shares_dict, share_col="share", group_col=None):
         """
         Calculates HHIs from precalculated shares at the corporation level
@@ -552,7 +584,36 @@ class ChoiceData():
             
         return output_dict
       
+    def format_hhi(self, output_dict, export=True, output_type="excel", file_path=None, sheet_name="HHI Change"):
+        """
+        Formatting options for calculate_shares() output
 
+        Parameters
+        ----------
+        output_dict : dictionary
+            Output from ChoiceData.calculate_shares().
+        export : Bool, optional
+            Boolean to export data. The default is True.
+        output_type : string, optional
+            Export file format. The default is "excel".
+        file_path : string, optional
+            Destination to export files. The default is None.
+
+        """
+        if type(export) != bool:
+            raise ValueError("Export parameter must be type bool")
+            
+        output = pd.DataFrame(output_dict)
+        output.index = ['Pre-Merger HHI', 'Post-Merger HHI', 'HHI Change']
+        output = output.transpose()
+        output['% HHI Change'] = output['HHI Change'] / output['Pre-Merger HHI']
+        output = output.transpose()
+        
+        if export:
+            self._export(file_path, output_type, output, sheet_name=sheet_name)
+        else:
+            return output
+        
 class DiscreteChoice():
     """
     

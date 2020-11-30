@@ -228,7 +228,7 @@ def base_shares():
 
 @pytest.fixture
 def base_hhi():
-    base_hhi = [3750.0] 
+    base_hhi = 3750.0
     return base_hhi
     
 @pytest.fixture
