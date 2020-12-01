@@ -194,9 +194,11 @@ def dictionary_comparison(dict1, dict2):
         raise ValueError("Comparisons have 0 Keys")
     
     matches = []
-    if dict1.keys == dict2.keys:
-        for key in dict1.keys:
+    if dict1.keys() == dict2.keys():
+        for key in dict1.keys():
             matches.append(dict1[key].equals(dict2[key])) 
+    else:
+        raise ValueError("Comparison Keys do not match")
     
     return all(matches)
 
@@ -217,6 +219,22 @@ def test_PsaShares(cd_psa):
                                             'share': [x / 46 for x in [30, 8, 1,3, 4]]})}
     
     assert dictionary_comparison(test_shares, actual_shares)
+    
+def test_MultiplePsaShares(cd_psa):
+    psa_test = {'x_0.75': [1,2,3],
+                'x_0.9': [1,2,3,4]}
+    
+    test_shares = cd_psa.calculate_shares(psa_test)
+    
+    actual_shares = {'x_0.75': pd.DataFrame({'corporation': ['x', 'x', 'y', 'y', 'z'],
+                                             'choice': ['a', 'b', 'c', 'd', 'e'],
+                                             'share': [x / 46 for x in [30, 8, 1,3, 4]]}),
+                    'x_0.9': pd.DataFrame({'corporation': ['x', 'x', 'y', 'y', 'z'],
+                                            'choice': ['a', 'b', 'c', 'd', 'e'],
+                                            'share': [x / 53 for x in [30, 15, 1,3,4]]
+                                            })}
+    assert dictionary_comparison(test_shares, actual_shares)
+
 
 #test for calculating HHI shares
 @pytest.fixture
