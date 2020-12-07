@@ -202,36 +202,31 @@ def dictionary_comparison(dict1, dict2):
     
     return all(matches)
 
-def test_BaseShares(cd_psa):
+def test_BaseShares(cd_psa, base_shares):
     test_shares = cd_psa.calculate_shares()
-    actual_shares = {'Base Shares': pd.DataFrame({'corporation':['x', 'x', 'y', 'y', 'z'],
-                                                   'choice': ['a', 'b', 'c', 'd', 'e'],
-                                                   'share': [.3, .2, .2, .05, .25]})}
+    actual_shares = {'Base Shares': pd.DataFrame(base_shares)}
     
     assert dictionary_comparison(test_shares, actual_shares)
     
-def test_PsaShares(cd_psa):
+def test_PsaShares(cd_psa, psa_shares):
     psa_test = {'x_0.75': [1,2,3]}
     test_shares = cd_psa.calculate_shares(psa_test)
     
-    actual_shares = {'x_0.75': pd.DataFrame({'corporation': ['x', 'x', 'y', 'y', 'z'],
-                                            'choice': ['a', 'b', 'c', 'd', 'e'],
-                                            'share': [x / 46 for x in [30, 8, 1,3, 4]]})}
+    actual_shares = {'x_0.75': psa_shares}
     
     assert dictionary_comparison(test_shares, actual_shares)
     
-def test_MultiplePsaShares(cd_psa):
+def test_MultiplePsaShares(cd_psa, psa_shares):
     psa_test = {'x_0.75': [1,2,3],
                 'x_0.9': [1,2,3,4]}
     
     test_shares = cd_psa.calculate_shares(psa_test)
     
-    actual_shares = {'x_0.75': pd.DataFrame({'corporation': ['x', 'x', 'y', 'y', 'z'],
-                                             'choice': ['a', 'b', 'c', 'd', 'e'],
-                                             'share': [x / 46 for x in [30, 8, 1,3, 4]]}),
+    actual_shares = {'x_0.75': psa_shares,
                     'x_0.9': pd.DataFrame({'corporation': ['x', 'x', 'y', 'y', 'z'],
                                             'choice': ['a', 'b', 'c', 'd', 'e'],
-                                            'share': [x / 53 for x in [30, 15, 1,3,4]]
+                                            'count': [x for x in [30, 15, 1,3,4]],
+                                            'count_share': [x / 53 for x in [30, 15, 1,3,4]]
                                             })}
     assert dictionary_comparison(test_shares, actual_shares)
 
@@ -241,7 +236,8 @@ def test_MultiplePsaShares(cd_psa):
 def base_shares():
     base_shares = pd.DataFrame({'corporation':['x', 'x', 'y', 'y', 'z'],
                                 'choice': ['a', 'b', 'c', 'd', 'e'],
-                                'share': [.3, .2, .2, .05, .25]})
+                                'count': [30, 20, 20, 5, 25],
+                                'count_share': [.3, .2, .2, .05, .25]})
     return base_shares
 
 @pytest.fixture
@@ -253,7 +249,8 @@ def base_hhi():
 def psa_shares():
     psa_shares = pd.DataFrame({'corporation': ['x', 'x', 'y', 'y', 'z'],
                                 'choice': ['a', 'b', 'c', 'd', 'e'],
-                                'share': [x / 46 for x in [30, 8, 1,3, 4]]})
+                                'count': [x for x in [30, 8, 1,3, 4]],
+                                'count_share': [x / 46 for x in [30, 8, 1,3, 4]]})
     return psa_shares
 
 @pytest.fixture
@@ -274,8 +271,8 @@ def test_HHIs(cd_psa, base_shares, psa_shares, base_hhi, psa_hhi):
     
 def test_HHI_sharecol(cd_psa, base_shares, psa_shares, base_hhi):
     df_alt = base_shares
-    df_alt['other shares'] = df_alt['share']
-    df_alt = df_alt.drop(columns="share")
+    df_alt['other shares'] = df_alt['count_share']
+    df_alt = df_alt.drop(columns="count_share")
     
     share_tables = {'Base Shares': df_alt}
     
@@ -287,8 +284,8 @@ def test_HHI_sharecol(cd_psa, base_shares, psa_shares, base_hhi):
     
 def test_HHI_BadSharecol(cd_psa, base_shares, psa_shares):
     df_alt = psa_shares
-    df_alt['other shares'] = df_alt['share']
-    df_alt = df_alt.drop(columns="share")
+    df_alt['other shares'] = df_alt['count_share']
+    df_alt = df_alt.drop(columns="count_share")
     
     share_tables = {'Base Shares': base_shares,
                 'x_0.75': df_alt}

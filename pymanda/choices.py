@@ -408,9 +408,8 @@ class ChoiceData():
                 df = df[df[self.geog_var].isin(psa_dict[key])]
 
             df = df[group + [weight_var]]
-            df_shares = (df.groupby(group).sum() / df[weight_var].sum()).reset_index()
-            
-            df_shares = df_shares.rename(columns = {weight_var: 'share'})
+            df_shares = df.groupby(group).sum().reset_index()
+            df_shares[weight_var +  "_share"] = df_shares[weight_var] / df_shares[weight_var].sum()
             output_dict.update({key: df_shares})
             
             if redefine_weight:
@@ -471,7 +470,7 @@ class ChoiceData():
                 self._export(file_path, output_type, output, sheet_name=key)
 
      
-    def calculate_hhi(self, shares_dict, share_col="share", group_col=None):
+    def calculate_hhi(self, shares_dict, share_col="count_share", group_col=None):
         """
         Calculates HHIs from precalculated shares at the corporation level
         
@@ -534,7 +533,7 @@ class ChoiceData():
             
         return output_dict
     
-    def hhi_change(self, trans_list, shares, trans_var=None, share_col="share"):
+    def hhi_change(self, trans_list, shares, trans_var=None, share_col="count_share"):
         """
         Calculates change in Herfindahl-Hirschman Index (HHI) from combining 
         a set of choices.
