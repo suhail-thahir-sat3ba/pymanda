@@ -384,7 +384,7 @@ class ChoiceData():
             base_shares = False
             
         if self.corp_var == self.choice_var:
-            group = self.choice_var
+            group = [self.choice_var]
         else:
             group = [self.corp_var, self.choice_var]
         
@@ -392,9 +392,11 @@ class ChoiceData():
         for key in psa_dict.keys():
             df = self.data.copy(deep=True)
             
+            redefine_weight=False
             if weight_var is None:
                 df['count'] = 1
                 weight_var = 'count'
+                redefine_weight=True
                 
             if restriction is not None:
                 df = df[restriction]
@@ -403,14 +405,16 @@ class ChoiceData():
                 for geo in psa_dict[key]:
                      if not df[self.geog_var].isin([geo]).any():
                          raise ValueError ("{g} is not in {col}".format(g=geo, col=self.geog_var)) 
-                df_shares = df[df[self.geog_var].isin(psa_dict[key])]
+                df = df[df[self.geog_var].isin(psa_dict[key])]
 
-            df_shares = df[[self.choice_var, weight_var]]
-            df_shares = (df.groupby(group).sum()).reset_index()
-            df_shares[weight_var + '_shares'] = df_shares[weight_var] / df_shares[weight_var]
+            df = df[group + [weight_var]]
+            df_shares = (df.groupby(group).sum() / df[weight_var].sum()).reset_index()
             
             df_shares = df_shares.rename(columns = {weight_var: 'share'})
             output_dict.update({key: df_shares})
+            
+            if redefine_weight:
+                weight_var = None
 
         return output_dict
         
