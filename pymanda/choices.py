@@ -440,7 +440,7 @@ class ChoiceData():
         if df[share_col].sum() != 1:
             raise ValueError ("Values of '{col}' in {d} do not sum to 1".format(col=share_col, d=data))
     
-    def format_shares(self, output_dict, export=True, output_type="excel", file_path=None):
+    def export_shares(self, output_dict, export=True, output_type="excel", file_path=None):
         """
         Formatting options for calculate_shares() output
 
@@ -461,13 +461,64 @@ class ChoiceData():
             
         if output_type =="csv":
             raise KeyError("'csv' is not a supported file type for exporting shares")
+
+        df_keys = pd.DataFrame({'keys': list(output_dict.keys())})
+        split_keys = df_keys['keys'].str.rsplit("_", n=1, expand=True)
+        df_keys = pd.concat([df_keys, split_keys], axis=1)
+        choices = list(split_keys.groupby(0).min().index)
         
-        if not export:
-            raise KeyError("export=False is not supported")
-        else:
-            for key in output_dict.keys():
-                output = output_dict[key]
+        final_out = {}
+        for choice in choices:
+            keep_keys = list(df_keys[df_keys[0].isin([choice])]['keys'])
+            
+            if self.corp_var != self.choice_var:
+                base_df = self.corp_map()
+                merge_vars = [self.corp_var, self.choice_var]
+            else:
+                base_df = pd.DataFrame({self.choice_var: self.data[self.choice_var].unique()})
+                merge_vars = [self.choice_var]
+            
+            #combine dictionary outputs with the same choice as center
+            keep_keys.sort() # places lower thresholds first
+            for key in keep_keys:
+                thres = key.rsplit("_")[-1]
+                merge_df = output_dict[key].copy()
+                cols = merge_df.columns[-2:]
+                cols = [x + "_{}".format(thres) for x in cols]
+                
+                merge_df.columns = merge_vars + cols
+                base_df = base_df.merge(merge_df, how='left', on=merge_vars)
+            
+            # add totals and sort by highest threshold 
+            if self.corp_var != self.choice_var:
+                corp_shares = base_df.groupby(self.corp_var).sum().reset_index()
+                corp_shares[self.choice_var] = "AAAAA"
+                base_df = base_df.append(corp_shares)
+                
+                sort_col = corp_shares.columns[-2]
+                corp_sort = corp_shares[[self.corp_var, sort_col]] # sort on highest threshold
+                corp_sort = corp_sort.rename(columns={sort_col: "subtotal sorter"})
+                base_df = base_df.merge(corp_sort, how='left', on=self.corp_var)
+                
+                base_df = base_df.fillna(0)
+                
+                base_df.sort_values(['subtotal sorter',  self.corp_var, sort_col, self.choice_var], ascending=[False, True, False, True], inplace= True)
+                base_df = base_df.drop(columns="subtotal sorter")
+                base_df[self.choice_var] = base_df[self.choice_var].str.replace("AAAAA", "Total")
+                
+            else:
+                sort_col = base_df.columsn[-1]
+                base_df = base_df.sort_values(sort_col, ascending=False)
+                
+            base_df = base_df.reset_index(drop=True)
+            final_out.update({choice: base_df})
+                 
+        if export:
+            for key in final_out.keys():
+                output = final_out[key]
                 self._export(file_path, output_type, output, sheet_name=key)
+        else:
+            return final_out
 
      
     def calculate_hhi(self, shares_dict, share_col="count_share", group_col=None):
