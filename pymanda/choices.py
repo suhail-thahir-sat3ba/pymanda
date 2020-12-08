@@ -203,12 +203,18 @@ class ChoiceData():
             output.to_csv(file_path)
         
         elif output_type == "excel":
-            with pd.ExcelWriter(file_path, mode="a", engine="openpyxl") as writer:
-                try:
-                    workbook = writer.book
-                    workbook.remove(workbook[sheet_name])
-                finally:    
-                    output.to_excel(writer, sheet_name=sheet_name)
+            try:
+                with pd.ExcelWriter(file_path, mode="a", engine="openpyxl") as writer:
+                    try:
+                        workbook = writer.book
+                        workbook.remove(workbook[sheet_name])
+                    except KeyError:
+                        pass
+                    finally:    
+                        output.to_excel(writer, sheet_name=sheet_name)
+            except FileNotFoundError:
+                with pd.ExcelWriter(file_path, mode="w", engine="openpyxl") as writer:
+                        output.to_excel(writer, sheet_name=sheet_name)
                  
     def export_psas(self, output_dict, export=True, output_type=None, file_path=None, sheet_name="psas"):
         """
@@ -944,9 +950,7 @@ class DiscreteChoice():
             div_shares = div_shares.merge(df, how='left', left_index=True, right_index=True)    
         
         return div_shares
-    
-    def export_diversions()
-    
+        
     def wtp_change(self, cd, choice_probs, trans_list):
         """
         Calculate the change in Willingness to Pay (WTP) for a combined entity
