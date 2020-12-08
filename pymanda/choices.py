@@ -665,7 +665,8 @@ class ChoiceData():
             final_output.update({key: output})
             
         if export:
-            self._export(file_path, output_type, output, sheet_name=sheet_name)
+            for key in final_output.keys():
+                self._export(file_path, output_type, final_output[key], sheet_name=key)
         else:
             return final_output
         
@@ -943,6 +944,8 @@ class DiscreteChoice():
             div_shares = div_shares.merge(df, how='left', left_index=True, right_index=True)    
         
         return div_shares
+    
+    def export_diversions()
     
     def wtp_change(self, cd, choice_probs, trans_list):
         """
