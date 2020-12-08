@@ -211,10 +211,10 @@ class ChoiceData():
                     except KeyError:
                         pass
                     finally:    
-                        output.to_excel(writer, sheet_name=sheet_name)
+                        output.to_excel(writer, sheet_name=sheet_name, index=False)
             except FileNotFoundError:
                 with pd.ExcelWriter(file_path, mode="w", engine="openpyxl") as writer:
-                        output.to_excel(writer, sheet_name=sheet_name)
+                        output.to_excel(writer, sheet_name=sheet_name, index=False)
                  
     def export_psas(self, output_dict, export=True, output_type=None, file_path=None, sheet_name="psas"):
         """
@@ -254,6 +254,8 @@ class ChoiceData():
         output = output.fillna(0)
         output.index.name = self.geog_var
         
+        output = output[output.columns.sort_values()]
+        output = output.reset_index()
         if export:
             self._export(file_path, output_type, output, sheet_name)
 
@@ -517,6 +519,22 @@ class ChoiceData():
                 base_df = base_df.sort_values(sort_col, ascending=False)
                 
             base_df = base_df.reset_index(drop=True)
+            
+            # add a total row
+            sums = pd.DataFrame({"totals": base_df.sum()})
+            sums = sums.T
+            sums = sums.drop(columns=merge_vars)
+            sums = sums / 2
+            num_cols = list(sums.columns)
+            for col in merge_vars:
+                sums[col]= "Total"
+            sums = sums[merge_vars + num_cols]
+            
+            base_df = sums.append(base_df)
+            
+            rowcheck = base_df[base_df.columns[list(~base_df.columns.isin(merge_vars))]]
+            
+            base_df = base_df[rowcheck.sum(axis=1) != 0]
             final_out.update({choice: base_df})
                  
         if export:
@@ -590,15 +608,17 @@ class ChoiceData():
             
         return output_dict
     
-    def hhi_change(self, trans_list, shares, trans_var=None, share_col="count_share"):
+    def hhi_change(self, trans_dict, shares, trans_var=None, share_col="count_share"):
         """
         Calculates change in Herfindahl-Hirschman Index (HHI) from combining 
-        a set of choices.
+        a set of choices. Will always calculate HHI based on corp_var
 
         Parameters
         ----------
-        trans_list : list
-            list of choices that will be combined for calculating combined hhi.
+        trans_list : dict
+            dict of lists with combinations of choices that will be combined 
+            for calculating combined hhi. Elements of combinations are expected
+            be in the trans_var column. 
         shares : dict
             dictoinary of dataframes of shares to calculate HHIs on.
         trans_var : str, optional
@@ -613,35 +633,52 @@ class ChoiceData():
             key(s) will match shares parameter
             values will be a list of [pre-merge HHI, post-merge HHI, HHI change].
         """
-        
-        if type(trans_list) != list:
-            raise TypeError ('''trans_list expected list. got {}'''.format(type(trans_list)))
-        if len(trans_list) < 2:
-            raise ValueError ('''trans_list needs atleast 2 elements to compare HHI change''')
-            
         if trans_var is None:
             trans_var = self.corp_var
+        if type(trans_dict) != dict:
+            raise TypeError ('''trans_dict is expected to be dict. Got {}'''.format(type(trans_dict)))
+            
+        for key in trans_dict.keys():
+            trans_list = trans_dict[key]
 
-        for elm in trans_list:
-            if not self.data[trans_var].isin([elm]).any():
-                raise ValueError ('''{element} is not an element in column {col}'''.format(element=elm, col=trans_var))
-        
+            if type(trans_list) != list:
+                raise TypeError ('''Elements of trans_dict are expected to be list. Got {}'''.format(type(trans_list)))
+
+            if len(trans_list) < 2:
+                raise ValueError ('''Elements of trans_dict need atleast 2 elements to compare HHI change''')
+            
+            for elm in trans_list:
+                if not self.data[trans_var].isin([elm]).any():
+                    raise ValueError ('''{element} is not an element in column {col}'''.format(element=elm, col=trans_var))
+            
         output_dict = {}
-        for key in shares.keys():
-            df = shares[key]
-            self.shares_checks(df, share_col, data=key)
+        hhi_index = ['Pre-Merger HHI', 'Post-Merger HHI', 'HHI Change']
+        for trans_key in trans_dict.keys():
+            trans_list = trans_dict[trans_key]
+            output = pd.DataFrame(index=hhi_index)
             
-            if trans_var not in df.columns:
-                raise KeyError ('''{var} is not column name in {data}'''.format(var=trans_var, data=key))    
             
-            pre_hhi = self.calculate_hhi({"x" : df}, share_col, group_col=trans_var)['x']
+            for key in shares.keys():
+                df = shares[key].copy()
+                self.shares_checks(df, share_col, data=key)
+                
+                if trans_var not in df.columns:
+                    raise KeyError ('''{var} is not column name in {data}'''.format(var=trans_var, data=key))    
+                
+                pre_hhi = self.calculate_hhi({"x" : df}, share_col, group_col=self.corp_var)['x']
+                
+                post_df = df
+                post_df[self.corp_var] = post_df[self.corp_var].where(~post_df[trans_var].isin(trans_list), 'combined')
+                post_hhi = self.calculate_hhi({"x": post_df}, share_col, group_col=self.corp_var)['x']
+                
+                hhi_change = post_hhi - pre_hhi
+                
+                out_df = pd.DataFrame({key : [pre_hhi, post_hhi, hhi_change]}, index=hhi_index)
+                output = output.merge(out_df, how="inner", left_index=True, right_index=True)
             
-            post_df = df
-            post_df[trans_var] = post_df[trans_var].where(~post_df[trans_var].isin(trans_list), 'combined')
-            post_hhi = self.calculate_hhi({"x": post_df}, share_col, group_col=trans_var)['x']
-            
-            hhi_change = post_hhi - pre_hhi
-            output_dict.update({key : [pre_hhi, post_hhi, hhi_change]})
+            output = output[output.columns.sort_values()]
+                
+            output_dict.update({trans_key: output})
             
         return output_dict
       
@@ -663,18 +700,14 @@ class ChoiceData():
         """
         if type(export) != bool:
             raise ValueError("Export parameter must be type bool")
-              
-        final_output = {}
-        for key in output_dict.keys():
-            output = pd.DataFrame(output_dict[key])
-            output.index = ['Pre-Merger HHI', 'Post-Merger HHI', 'HHI Change']
-            final_output.update({key: output})
-            
+                   
         if export:
-            for key in final_output.keys():
-                self._export(file_path, output_type, final_output[key], sheet_name=key)
+            for key in output_dict.keys():
+                out = output_dict[key]
+                out = out.reset_index()
+                self._export(file_path, output_type, out, sheet_name=key)
         else:
-            return final_output
+            return output_dict
         
 class DiscreteChoice():
     """
@@ -950,6 +983,34 @@ class DiscreteChoice():
             div_shares = div_shares.merge(df, how='left', left_index=True, right_index=True)    
         
         return div_shares
+    
+    def _export(self, file_path, output_type, output, sheet_name=None):
+        """
+        Utility function for exporting data.
+        """
+        accepted_types  = ["csv", "excel"]
+        if output_type not in accepted_types:
+            raise KeyError("{input} is not a supported format. Valid export options are {list}".format(input=output_type, list=accepted_types))
+           
+        if output_type == "csv":
+            output.to_csv(file_path)
+        
+        elif output_type == "excel":
+            try:
+                with pd.ExcelWriter(file_path, mode="a", engine="openpyxl") as writer:
+                    try:
+                        workbook = writer.book
+                        workbook.remove(workbook[sheet_name])
+                    except KeyError:
+                        pass
+                    finally:    
+                        output.to_excel(writer, sheet_name=sheet_name)
+            except FileNotFoundError:
+                with pd.ExcelWriter(file_path, mode="w", engine="openpyxl") as writer:
+                        output.to_excel(writer, sheet_name=sheet_name)
+                 
+    # def export_diversions(self, output_dict, export=True, output_type=None, file_path=None, sheet_name="Diversions"):
+        
         
     def wtp_change(self, cd, choice_probs, trans_list):
         """
