@@ -459,8 +459,8 @@ class ChoiceData():
         if type(export) != bool:
             raise ValueError("Export parameter must be type bool")
             
-        if output_type =="csv":
-            raise KeyError("'csv' is not a supported file type for exporting shares")
+        if output_type =="csv" and len(output_dict.keys())>1:
+            raise KeyError("Output type 'csv' is not supported for multiple share tables. Use output_type='excel'.")
 
         df_keys = pd.DataFrame({'keys': list(output_dict.keys())})
         split_keys = df_keys['keys'].str.rsplit("_", n=1, expand=True)
