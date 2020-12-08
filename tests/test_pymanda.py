@@ -216,19 +216,66 @@ def test_PsaShares(cd_psa, psa_shares):
     
     assert dictionary_comparison(test_shares, actual_shares)
     
-def test_MultiplePsaShares(cd_psa, psa_shares):
+def test_MultiplePsaShares(cd_psa, MultiplePsaShares):
     psa_test = {'x_0.75': [1,2,3],
                 'x_0.9': [1,2,3,4]}
     
     test_shares = cd_psa.calculate_shares(psa_test)
     
-    actual_shares = {'x_0.75': psa_shares,
-                    'x_0.9': pd.DataFrame({'corporation': ['x', 'x', 'y', 'y', 'z'],
-                                            'choice': ['a', 'b', 'c', 'd', 'e'],
-                                            'count': [x for x in [30, 15, 1,3,4]],
-                                            'count_share': [x / 53 for x in [30, 15, 1,3,4]]
-                                            })}
+    actual_shares = MultiplePsaShares
     assert dictionary_comparison(test_shares, actual_shares)
+
+#Tests for exporting Shares
+def test_ExportBaseShares(cd_psa, base_shares):
+    base_dict = {"Base Shares": base_shares}
+    test = cd_psa.export_shares(base_dict, export=False)
+    
+    base = [50, 30, 20, 25, 20, 5, 25, 24]
+    
+    answer_df = pd.DataFrame({"corporation": ["x", "x", "x", "y", "y", "y", "z", "z"],
+                           "choice": ['Total', 'a', 'b', 'Total', 'c', 'd', 'Total', 'e'],
+                           "count_Base Shares": base,
+                           "count_share_Base Shares": [x / 100 for x in base]})
+    answer = {'Base Shares': answer_df}    
+                                       
+    return dictionary_comparison(test, answer)
+
+def test_ExportMultipleThresholds(cd_psa, MultiplePsaShares, MultiplePsaExport):
+    test = cd_psa.export_shares(MultiplePsaShares, export=False)
+    
+    answer = MultiplePsaExport
+    return dictionary_comparison(test, answer)
+
+def test_ExportMultiplePSAs(cd_psa, MultiplePsaShares, MultiplePsaExport):
+    psas = MultiplePsaShares
+    
+    z75 = [10,19]
+    z90 = [8, 11, 3, 23]
+    
+    psas.update({ 'z_0.75': pd.DataFrame({'corporation': ['y', 'z'],
+                                         'choice': ['c', 'e'],
+                                         'count': z75,
+                                         'count_shares': [x / 29 for x in z75]}),
+        'z_0.9': pd.DataFrame({'corporation': ['x', 'y', 'y', 'z'],
+                                         'choice': ['b', 'c', 'd', 'e'],
+                                         'count': z90,
+                                         'count_shares': [x / 56 for x in z90]})})
+    
+    test = cd_psa.export_shares(psas, export=False)
+    
+    answer = MultiplePsaExport
+    z75 = [19, 19, 10, 10, 0, 0, 0, 0]
+    z90 = [23, 23, 14, 11, 3, 8, 8, 0]
+    z_df = pd.DataFrame({'corporation': ['z', 'z', 'y', 'y', 'y', 'x', 'x', 'x'],
+                                    'choice': ['Total', 'e', 'Total', 'c', 'd', 'Total', 'b', 'a'],
+                                    'count_0.75': z75,
+                                    'count_share_0.75': [x / 29 for x in z75],
+                                    'count_0.9': z90,
+                                    'count_share_0.9': [x / 45 for x in z90]})
+    answer.update({"z": z_df})
+    
+    return dictionary_comparison(test, answer)
+    
 
 
 #test for calculating HHI shares
@@ -252,6 +299,28 @@ def psa_shares():
                                 'count': [x for x in [30, 8, 1,3, 4]],
                                 'count_share': [x / 46 for x in [30, 8, 1,3, 4]]})
     return psa_shares
+
+@pytest.fixture
+def MultiplePsaShares(psa_shares):
+    MultiplePsaShares = {'x_0.75': psa_shares,
+                'x_0.9': pd.DataFrame({'corporation': ['x', 'x', 'y', 'y', 'z'],
+                                        'choice': ['a', 'b', 'c', 'd', 'e'],
+                                        'count': [x for x in [30, 15, 1,3,4]],
+                                        'count_share': [x / 53 for x in [30, 15, 1,3,4]]
+                                        })}
+    return MultiplePsaShares
+
+@pytest.fixture
+def MultiplePsaExport():
+    x_75 = [38, 30, 8, 4, 3, 1, 4, 4]
+    x_90 = [45, 30, 15, 4, 3, 1, 4, 4]
+    MultiplePsaExport = {'x': pd.DataFrame({'corporation': ['x', 'x', 'x', 'y', 'y', 'y', 'z', 'z'],
+                          'choice': ['Total', 'a', 'b', 'Total', 'd', 'c', 'Total', 'e'],
+                          'count_0.75': x_75,
+                          'count_share_0.75': [x / 46 for x in x_75],
+                          'count_0.9': x_90,
+                          'count_share_0.9': [x / 53 for x in x_90]})}
+    return MultiplePsaExport
 
 @pytest.fixture
 def psa_hhi():
@@ -298,14 +367,19 @@ def test_HHI_BadInput(cd_psa):
         cd_psa.calculate_hhi(cd_psa.data)
 
 # test for calculating changes in HHI
-def test_HHIChange(cd_psa, base_shares, psa_shares, base_hhi, psa_hhi):
+@pytest.fixture
+def MultiHHIChange(base_hhi, psa_hhi):
+    MultiHHIChange = {'Base Shares': [base_hhi, 5000, 1250],
+                 'x_0.75' : [psa_hhi, 7835839010804385 / 1099511627776, 166277750892401 / 1099511627776]} # approximately 7126.66 post and 151.23 change
+    
+    return MultiHHIChange
+
+def test_HHIChange(cd_psa, base_shares, psa_shares, MultiHHIChange):
     share_dict = {'Base Shares': base_shares,
                   'x_0.75': psa_shares}
     test_change = cd_psa.hhi_change(['y', 'z'], share_dict)
     
-    actual_change = {'Base Shares': [base_hhi, 5000, 1250],
-                     'x_0.75' : [psa_hhi, 7835839010804385 / 1099511627776, 166277750892401 / 1099511627776]} # approximately 7126.66 post and 151.23 change
-    
+    actual_change = MultiHHIChange
     assert test_change == actual_change
 
 def test_HHIChange_TransCol(cd_psa, base_shares):
@@ -344,6 +418,15 @@ def test_HHIChange_BadTransCol(cd_psa, base_shares):
     with pytest.raises(KeyError):
         cd_psa.hhi_change(['c', 'd'], share_dict, trans_var='systen')
 
+# Tests for export HHI
+def test_ExportHHI_Change(cd_psa, MultiHHIChange):
+    test = cd_psa.export_hhi_change(MultiHHIChange, export=False)
+    
+    index = ['Pre-Merger HHI', 'Post-Merger HHI', 'HHI Change']
+    answer = {'Base Shares': pd.DataFrame({0: MultiHHIChange['Base Shares']}, index=index),
+              'x_0.75': pd.DataFrame({0: MultiHHIChange['x_0.75']}, index=index)}
+    
+    assert dictionary_comparison(test, answer)
 # Tests for DiscreteChoice
 @pytest.fixture
 def semi_cd():

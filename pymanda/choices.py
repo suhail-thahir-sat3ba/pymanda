@@ -639,7 +639,7 @@ class ChoiceData():
             
         return output_dict
       
-    def export_hhi(self, output_dict, export=True, output_type="excel", file_path=None, sheet_name="HHI Change"):
+    def export_hhi_change(self, output_dict, export=True, output_type="excel", file_path=None, sheet_name="HHI Change"):
         """
         Formatting options for calculate_shares() output
 
@@ -657,17 +657,17 @@ class ChoiceData():
         """
         if type(export) != bool:
             raise ValueError("Export parameter must be type bool")
+              
+        final_output = {}
+        for key in output_dict.keys():
+            output = pd.DataFrame(output_dict[key])
+            output.index = ['Pre-Merger HHI', 'Post-Merger HHI', 'HHI Change']
+            final_output.update({key: output})
             
-        output = pd.DataFrame(output_dict)
-        output.index = ['Pre-Merger HHI', 'Post-Merger HHI', 'HHI Change']
-        output = output.transpose()
-        output['% HHI Change'] = output['HHI Change'] / output['Pre-Merger HHI']
-        output = output.transpose()
-        
         if export:
             self._export(file_path, output_type, output, sheet_name=sheet_name)
         else:
-            return output
+            return final_output
         
 class DiscreteChoice():
     """
