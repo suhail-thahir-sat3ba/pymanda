@@ -1288,20 +1288,21 @@ class DiscreteChoice():
             
         avg_upp = (upp1 * obs1  + upp2 * obs2) / (obs1 + obs2)
         
-        upp = pd.DataFrame({'upp_{}'.format(upp_dict1['name']): upp1,
-                            'upp_{}'.format(upp_dict2['name']): upp2,
-                            'avg_upp': avg_upp}, index = [0])
+        upps = [upp_dict1, upp_dict2]
+        output = pd.DataFrame({"Name": [x['name'] for x in upps],
+                              "Price": [x['price'] for x in upps],
+                              "Diversion to Other System": [div1_to_2, div2_to_1],
+                              "Margin": [x['margin'] for x in upps],
+                              "UPP": [upp1, upp2],
+                              "Average UPP": [avg_upp, avg_upp]})
         
-        return upp
+        return output
 
     def export_upp(self, upp, cd=None, export=True, output_type="excel", file_path=None, sheet_name="UPP"):
         if type(export) != bool:
             raise ValueError("Export parameter must be type bool")
-        out = upp
-        out = out.T
-        out = out.reset_index()
-        out.columns = ["Entity", "UPP"]
+
         if export:
-            self._export(file_path, output_type, out, sheet_name=sheet_name)
+            self._export(file_path, output_type, upp, sheet_name=sheet_name)
         else:
             return out    
