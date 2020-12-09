@@ -754,29 +754,47 @@ def test_ExportDiversions_corp_to_choice(semi_dc, semi_cd_corp, dc_semiparam_cor
     test = semi_dc.export_diversions(dc_semiparam_corp_divs, semi_cd_corp, export=False)
     
     a = [1, .5857, .3286, .2571, .4143, .3, .1143]
+    base = [1000, 220, 110, 110, 220, 110, 110]
     a_df = pd.DataFrame({'corp': ['Total', 'c', 'c', 'c', 'b', 'b', 'b'],
                          'choice': ['Total', 'Total', 'z', 'y', 'Total', 'x', 'w'],
+                         "count_Base Shares": base,
+                         "count_share_Base Shares": [x / 1000 for x in base], 
                          'a': a,
                          'a_diverted': [x * 560 for x in a]},
                           dtype='object')
     
     b = [1, .5291, .3259, .2032, .4709, .2931, .1778]
+    base = [1000, 560, 300, 260, 220, 110, 110]
     b_df = pd.DataFrame({'corp': ['Total', 'a', 'a', 'a', 'c', 'c', 'c'],
                          'choice': ['Total', 'Total', 'u', 'v', 'Total', 'z', 'y'],
+                         "count_Base Shares": base,
+                         "count_share_Base Shares": [x / 1000 for x in base],
                          'b': b,
                          'b_diverted': [x *220 for x in b]},
                          dtype='object')
     
     c = [1, .6905, .3788, .3117, .3095, .2576, .0519]
+    base = [1000, 560, 300, 260, 220, 110, 110]
     c_df = pd.DataFrame({'corp': ['Total', 'a', 'a', 'a', 'b', 'b', 'b'],
                         'choice': ['Total', 'Total', 'u', 'v', 'Total', 'w', 'x'],
+                        "count_Base Shares": base,
+                        "count_share_Base Shares": [x / 1000 for x in base],
                         'c': c,
                         'c_diverted': [x * 220 for x in c]},
                          dtype='object')
-    
+
     answer = {'a': a_df,
               'b': b_df,
               'c': c_df}
+    
+    for dictionary in [test, answer]:
+        for key in ['a', 'b', 'c']:
+            df = dictionary[key]
+            df["{}".format(key)] = df["{}".format(key)].astype("float")
+            df["{}_diverted".format(key)] = df["{}_diverted".format(key)].astype("float")
+            df = df.round(decimals=4)
+            dictionary[key] = df
+            
     
     assert dictionary_comparison(test, answer)
     
@@ -786,8 +804,11 @@ def test_ExportDiversions_choice_to_choice(semi_dc, semi_cd_corp, dc_semiparam_c
     test = semi_dc.export_diversions(dc_semiparam_corp_divs_choice, semi_cd_corp, export=False)
     
     u = [1, .5102, .4592, .051, .3946, .2041, .1905, .0952, .0952]
+    base = [1000, 220, 110, 110, 220, 110, 110, 560, 260]
     u_df = pd.DataFrame({'corp': ['Total', 'c', 'c', 'c', 'b', 'b', 'b', 'a', 'a'],
                          'choice': ['Total', 'Total', 'y', 'z', 'Total', 'w', 'x', 'Total', 'v'],
+                         "count_Base Shares": base,
+                         "count_share_Base Shares": [x / 1000 for x in base],
                          'u': u,
                          'u_diverted': [x * 300 for x in u]},
                         dtype='object')
@@ -801,7 +822,10 @@ def test_ExportDiversions_OneChoice(semi_dc, semi_cd, dc_semiparam_diversion):
     test = semi_dc.export_diversions(dc_semiparam_diversion[['a']], semi_cd, export=False)
     
     a = [1, .5857, .4143]
+    base = [1000, 220, 220]
     answer = {'a': pd.DataFrame({'choice': ['Total', 'c', 'b'],
+                                 "count_Base Shares": base,
+                                 "count_share_Base Shares": [x / 1000 for x in base],
                                  'a': a,
                                  'a_diverted': [x * 560 for x in a]},
                                 dtype='object')}

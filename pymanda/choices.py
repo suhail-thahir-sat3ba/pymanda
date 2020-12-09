@@ -515,7 +515,7 @@ class ChoiceData():
                 base_df[self.choice_var] = base_df[self.choice_var].str.replace("AAAAA", "Total")
                 
             else:
-                sort_col = base_df.columsn[-1]
+                sort_col = base_df.columns[-1]
                 base_df = base_df.sort_values(sort_col, ascending=False)
                 
             base_df = base_df.reset_index(drop=True)
@@ -1060,11 +1060,17 @@ class DiscreteChoice():
             base_df[div + "_diverted"] = base_df[div] * diverted
             base_df = base_df.reset_index().rename(columns={"index": cd.choice_var})
             
+            #add base shares
+            base_share = cd.calculate_shares()
+            base_share = cd.export_shares(base_share, export=False)
+            base_share = base_share['Base Shares']
+            
+            
             # add subtotals
             if cd.corp_var != cd.choice_var:
                 corp_map = cd.corp_map()
                 base_df = corp_map.merge(base_df, on=cd.choice_var)
-                
+                                
                 corp_shares = base_df.groupby(cd.corp_var).sum().reset_index()
                 corp_shares[cd.choice_var] = "AAAAA"
                 base_df = base_df.append(corp_shares)
@@ -1090,6 +1096,7 @@ class DiscreteChoice():
                 
             base_df = base_df.reset_index(drop=True)
             
+
             # add a total row
             sums = pd.DataFrame({"totals": base_df.sum()})
             sums = sums.T
@@ -1109,6 +1116,9 @@ class DiscreteChoice():
             
             base_df = base_df[rowcheck.sum(axis=1) != 0]
             base_df = base_df.reset_index(drop=True)
+            
+            base_df = base_share.merge(base_df, how="right", on=id_cols)
+            
             final_out.update({div: base_df})
                  
         if export:
