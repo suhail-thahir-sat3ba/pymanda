@@ -424,7 +424,82 @@ class ChoiceData():
                 weight_var = None
 
         return output_dict
+    
+    def stratify_shares(self, levels_var, weight_var=None, rows_as_levels=False, shares_axis="counts", corp_var = False):
+        """
+        Calculate shares while stratifying on a variable
+
+        Parameters
+        ----------
+        levels_var : str
+            Column to group by on calculating shares.
+        weight_var : str, optional
+            Variable to use as weight. The default is None, which weighs each 
+            observation equally.
+        rows_as_levels : bool, optional
+            Whether to output levels as rows. The default is False.
+        shares_axis : str or int, optional
+            When set to 'counts', output will show sum of observation or observation weights.
+            When set to 0 or 1, will calculate shares along the given axis.
+            The default is "counts".
+        corp_var : bool, optional
+            Whether to output shares by corp_var level or choice_var level.
+            The default is False.
+
+        Returns
+        -------
+        df : pandas.core.frame.DataFrame
+            Corresponding share level to output.
+
+        """
         
+        if weight_var is None:
+            weight_var= self.wght_var
+        if weight_var not in self.data.columns and weight_var is not None:
+            raise KeyError("{} is not a Column in ChoiceData".format(weight_var))
+        
+        if type(corp_var) is not bool:
+            raise TypeError("corp_var expected type bool. Got {}".format(type(corp_var)))
+        elif corp_var:
+            if self.corp_var == self.choice_var:
+                raise ValueError('''corp_var can only be True if corp_var is different from choice_var''')
+                
+        shares_inputs = ["counts", 0, 1]
+        if shares_axis not in shares_inputs:
+            raise ValueError("shares must be in {inputs}. Got {s}".format(inputs=shares_inputs, s=shares_axis))
+        
+        df = self.data.copy()
+        
+        if weight_var is None:
+            df['count'] = 1
+            weight_var = 'count'
+        
+        if corp_var:
+            group = [self.corp_var]
+        else:
+            group = [self.corp_var, self.choice_var]
+        
+        df = df.groupby(group + [levels_var]).sum(weight_var)
+        df= df.reset_index()
+        df = df.pivot_table(values=weight_var, index=group, columns=levels_var, fill_value=0)   
+        
+        if not rows_as_levels:
+            if shares_axis == 0:
+                df = df / df.sum(axis=0)
+            elif shares_axis == 1:
+                df = df.T / df.sum(axis=1)
+                df = df.T
+        if rows_as_levels:
+            if shares_axis == "counts":
+                df= df.T
+            elif shares_axis == 0:
+                df = df.T / df.sum(axis=1)
+            elif shares_axis == 1:
+                df = df / df.sum(axis=0)
+                df = df.T
+        
+        return df
+
     def shares_checks(self, df, share_col, data="Data"):
         """
         Checks for columns that are supposed to contain shares

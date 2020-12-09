@@ -444,6 +444,81 @@ def test_ExportHHI_Change(cd_psa, MultiHHIChange, hhi_index):
     
     assert dictionary_comparison(test, answer)
     
+# Tests for stratify_shares
+@pytest.fixture
+def stratified_share_counts(): # based on semi_cd_corp
+    stratified_share_counts = pd.DataFrame({0:[220, 0, 110, 30, 110, 30],
+                                            1:[80, 260, 0, 80, 0, 80]},
+                                           index = ['u', 'v', 'w', 'x', 'y', 'z'])
+    
+    stratified_share_counts.index.name = "choice"
+    stratified_share_counts['corp'] = ['a', 'a', 'b', 'b', 'c', 'c']
+    stratified_share_counts = stratified_share_counts.reset_index()
+    stratified_share_counts = stratified_share_counts.set_index(['corp', 'choice'])
+    
+    return stratified_share_counts
+
+@pytest.fixture
+def stratified_share_cols(): # based on semi_cd_corp
+    stratified_share_cols = pd.DataFrame({0:[x / 500 for x in [220, 0, 110, 30, 110, 30]],
+                                     1:[x / 500 for x in[80, 260, 0, 80, 0, 80]]},
+                                     index = ['u', 'v', 'w', 'x', 'y', 'z'])
+    
+    stratified_share_cols.index.name = "choice"
+    stratified_share_cols['corp'] = ['a', 'a', 'b', 'b', 'c', 'c']
+    stratified_share_cols = stratified_share_cols.reset_index()
+    stratified_share_cols = stratified_share_cols.set_index(['corp', 'choice'])
+    
+    return stratified_share_cols
+
+@pytest.fixture
+def stratified_share_rows(stratified_share_counts): # based on semi_cd_corp
+    stratified_share_rows = (stratified_share_counts.T / stratified_share_counts.sum(axis=1)).T
+
+    return stratified_share_rows
+
+def test_StratifiedShares(stratified_share_counts, semi_cd_corp):
+    test = semi_cd_corp.stratify_shares("x1")
+
+    answer = stratified_share_counts
+    
+    assert test.equals(answer)
+    
+def test_StratifiedShares_RowsAsLevels(stratified_share_counts, semi_cd_corp):
+    test = semi_cd_corp.stratify_shares("x1", rows_as_levels=True)
+
+    answer = stratified_share_counts.T
+    
+    assert test.equals(answer)
+    
+def test_StratifiedShares_Axis0(stratified_share_cols, semi_cd_corp):
+    test = semi_cd_corp.stratify_shares("x1", shares_axis=0)
+
+    answer = stratified_share_cols
+    
+    assert test.equals(answer)
+        
+def test_StratifiedShares_Axis1(stratified_share_rows, semi_cd_corp):
+    test = semi_cd_corp.stratify_shares("x1", shares_axis=1)
+
+    answer = stratified_share_rows
+    
+    assert test.equals(answer)
+    
+def test_StratifiedShares_RowsAsLevels_Axis0(semi_cd_corp, stratified_share_cols):
+    test = semi_cd_corp.stratify_shares("x1", shares_axis=0)
+    
+    answer = stratified_share_cols
+
+    assert test.equals(answer)
+
+def test_StratifiedShares_RowsAsLevels_Axis1(semi_cd_corp, stratified_share_rows):
+    test = semi_cd_corp.stratify_shares("x1", shares_axis=1)
+    
+    answer = stratified_share_rows
+
+    assert test.equals(answer)
+    
 # Tests for DiscreteChoice
 @pytest.fixture
 def semi_cd():
