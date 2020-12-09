@@ -524,7 +524,8 @@ class ChoiceData():
             sums = pd.DataFrame({"totals": base_df.sum()})
             sums = sums.T
             sums = sums.drop(columns=merge_vars)
-            sums = sums / 2
+            if self.corp_var != self.choice_var:
+                sums = sums / 2
             num_cols = list(sums.columns)
             for col in merge_vars:
                 sums[col]= "Total"
@@ -808,8 +809,10 @@ class DiscreteChoice():
                 
         if use_corp:
             choice= cd.corp_var
+            self._used_corp = True
         else:
             choice= cd.choice_var
+            self._used_corp = False
 
         # currently only supports 'semiparametric' solver. Added solvers should use elif statement
         if self.solver=='semiparametric':
@@ -915,6 +918,10 @@ class DiscreteChoice():
             
         div_choices : list
             list of choices to calculate diversions for.
+            
+        div_choice_var: str
+            column name to look for div_choices. If None, will look in 
+            cd.corp_var. Default is None
 
         Returns
         -------
@@ -1004,15 +1011,114 @@ class DiscreteChoice():
                     except KeyError:
                         pass
                     finally:    
-                        output.to_excel(writer, sheet_name=sheet_name)
+                        output.to_excel(writer, sheet_name=sheet_name, index=False)
             except FileNotFoundError:
                 with pd.ExcelWriter(file_path, mode="w", engine="openpyxl") as writer:
-                        output.to_excel(writer, sheet_name=sheet_name)
+                        output.to_excel(writer, sheet_name=sheet_name, index=False)
                  
-    # def export_diversions(self, output_dict, export=True, output_type=None, file_path=None, sheet_name="Diversions"):
+    def export_diversions(self, div_shares, cd, export=True, output_type="excel", file_path=None, sheet_name="Diversions"):
+        """
+        Formatting options for diversions() output
+
+        Parameters
+        ----------
+        div_shares : pandas.core.frame.DataFrame
+            Output from ChoiceData.diversions().
+        export : Bool, optional
+            Boolean to export data. The default is True.
+        output_type : string, optional
+            Export file format. The default is "excel".
+        file_path : string, optional
+            Destination to export files. The default is None.
+
+        """
+        if type(export) != bool:
+            raise ValueError("Export parameter must be type bool")
+            
+        if output_type =="csv" and len(div_shares.columns)>1:
+            raise KeyError("Output type 'csv' is not supported for multiple share tables. Use output_type='excel'.")
+    
+        divs = list(div_shares.columns)
+        choices = list(div_shares.index) 
         
+        final_out = {}
+        for div in divs:
+            base_df = div_shares[[div]].copy()
+            
+            if div not in choices or self._used_corp:
+                if cd.wght_var is None:
+                    diverted = len(cd.data[cd.data[cd.corp_var]==div])
+                else:
+                    diverted = cd.data[cd.data[cd.corp_var]==div].sum(cd.wght_var)
+            else:
+                if cd.wght_var is None:
+                    diverted = len(cd.data[cd.data[cd.choice_var]==div])
+                else:
+                    diverted = cd.data[cd.data[cd.choice_var]==div].sum(cd.wght_var)
+
+                
+            base_df[div + "_diverted"] = base_df[div] * diverted
+            base_df = base_df.reset_index().rename(columns={"index": cd.choice_var})
+            
+            # add subtotals
+            if cd.corp_var != cd.choice_var:
+                corp_map = cd.corp_map()
+                base_df = corp_map.merge(base_df, on=cd.choice_var)
+                
+                corp_shares = base_df.groupby(cd.corp_var).sum().reset_index()
+                corp_shares[cd.choice_var] = "AAAAA"
+                base_df = base_df.append(corp_shares)
+                
+                sort_col = corp_shares.columns[-2]
+                corp_sort = corp_shares[[cd.corp_var, sort_col]] # sort on highest threshold
+                corp_sort = corp_sort.rename(columns={sort_col: "subtotal sorter"})
+                base_df = base_df.merge(corp_sort, how='left', on=cd.corp_var)
+                
+                base_df = base_df.fillna(0)
+                
+                base_df.sort_values(['subtotal sorter',  cd.corp_var, sort_col, cd.choice_var], ascending=[False, True, False, True], inplace= True)
+                base_df = base_df.drop(columns="subtotal sorter")
+                base_df[cd.choice_var] = base_df[cd.choice_var].str.replace("AAAAA", "Total")
+                
+                id_cols= [cd.corp_var, cd.choice_var]
+                
+            else:
+                sort_col = base_df.columns[-1]
+                base_df = base_df.sort_values(sort_col, ascending=False)
+                
+                id_cols = [cd.choice_var]
+                
+            base_df = base_df.reset_index(drop=True)
+            
+            # add a total row
+            sums = pd.DataFrame({"totals": base_df.sum()})
+            sums = sums.T
+            sums = sums.drop(columns=id_cols)
+            
+            if cd.corp_var != cd.choice_var:
+                sums = sums / 2
+
+            num_cols = list(sums.columns)
+            for col in id_cols:
+                sums[col]= "Total"
+            sums = sums[id_cols + num_cols]
+            
+            base_df = sums.append(base_df)
+            
+            rowcheck = base_df[base_df.columns[list(~base_df.columns.isin(id_cols))]]
+            
+            base_df = base_df[rowcheck.sum(axis=1) != 0]
+            base_df = base_df.reset_index(drop=True)
+            final_out.update({div: base_df})
+                 
+        if export:
+            for key in final_out.keys():
+                output = final_out[key]
+                self._export(file_path, output_type, output, sheet_name=key)
+        else:
+            return final_out        
         
-    def wtp_change(self, cd, choice_probs, trans_list):
+    def wtp_change(self, cd, choice_probs, trans_dict):
         """
         Calculate the change in Willingness to Pay (WTP) for a combined entity
         given a DataFrame of predictions
@@ -1024,8 +1130,8 @@ class DiscreteChoice():
         choice_probs : pandas.core.frame.DataFrame
             DataFrame of observations with diversion probabilities 
             corresponding to cd.
-        trans_list: list
-            List of choices to calculate WTP change on.
+        trans_list: dict
+            Dict of lists of choices to calculate WTP change on.
 
         Returns
         -------
@@ -1035,40 +1141,65 @@ class DiscreteChoice():
 
         """
         
-        if type(trans_list) != list:
-            raise TypeError ('''trans_list expected type list. got {}'''.format(type(trans_list)))
+        if type(trans_dict) != dict:
+            raise TypeError ('''trans_dict expected type dict. got {}'''.format(type(trans_dict)))
         
-        if len(trans_list) < 2:
-            raise ValueError ('''trans_list needs atleast 2 choices''')
-        
-        for tran in trans_list:
-            if tran not in choice_probs.columns:
-                raise KeyError ('''{} is not a choice in choice_probs'''.format(tran))
-
-        wtp_df = choice_probs[trans_list].copy()
-        
-        wtp_df['combined'] = wtp_df.sum(axis=1)
-        
-
-        if (wtp_df==1).any().any():
-            warnings.warn('''A diversion probability for a bin equals 1 which will result in infinite WTP.''' , RuntimeWarning)
-        
-        with warnings.catch_warnings(record = True): # prevents redundant warning for np.log(0)
-            wtp_df = -1 * np.log(1- wtp_df) # -1 * ln(1-prob)
-        
-        if cd.wght_var is not None:
-            cols = wtp_df.columns
-            wtp_df['wght'] = cd.data[cd.wght_var]
-            for c in cols:
-                wtp_df[c] = wtp_df[c] * wtp_df['wght']
-            wtp_df = wtp_df.drop(columns=['wght'])
+        for key in trans_dict.keys():
+            trans_list = trans_dict[key]
+            if type(trans_list) != list:
+                raise TypeError ('''trans_list expected type list. got {}'''.format(type(trans_list)))    
+                
+            if len(trans_list) < 2:
+                raise ValueError ('''trans_list needs atleast 2 choices''')
             
-        wtp_df = wtp_df.sum().to_frame().transpose()
+            for tran in trans_list:
+                if tran not in choice_probs.columns:
+                    raise KeyError ('''{} is not a choice in choice_probs'''.format(tran))
+
+        final_output = {}
+        for key in trans_dict.keys():
+            trans_list = trans_dict[key]
+            wtp_df = choice_probs[trans_list].copy()
+            
+            wtp_df['combined'] = wtp_df.sum(axis=1)
+            
+    
+            if (wtp_df==1).any().any():
+                warnings.warn('''A diversion probability for a bin equals 1 which will result in infinite WTP.''' , RuntimeWarning)
+            
+            with warnings.catch_warnings(record = True): # prevents redundant warning for np.log(0)
+                wtp_df = -1 * np.log(1- wtp_df) # -1 * ln(1-prob)
+            
+            if cd.wght_var is not None:
+                cols = wtp_df.columns
+                wtp_df['wght'] = cd.data[cd.wght_var]
+                for c in cols:
+                    wtp_df[c] = wtp_df[c] * wtp_df['wght']
+                wtp_df = wtp_df.drop(columns=['wght'])
+                
+            wtp_df = wtp_df.sum().to_frame().transpose()
+            
+            wtp_df['wtp_change'] = (wtp_df['combined'] - wtp_df[trans_list].sum(axis = 1)) /  wtp_df[trans_list].sum(axis = 1)
         
-        wtp_df['wtp_change'] = (wtp_df['combined'] - wtp_df[trans_list].sum(axis = 1)) /  wtp_df[trans_list].sum(axis = 1)
-    
-        return wtp_df        
-    
+            final_output.update({key: wtp_df})
+            
+        return final_output   
+
+    def export_wtp(self, wtp_changes, cd=None, export=True, output_type="excel", file_path=None, sheet_name="wtp changes"):
+        if type(export) != bool:
+            raise ValueError("Export parameter must be type bool")
+                    
+        if export:
+            for key in wtp_changes.keys():
+                out = wtp_changes[key]
+                out = out.T
+                out = out.reset_index()
+                out.columns = ["Entity", "WTP"]
+                self._export(file_path, output_type, out, sheet_name=key)
+        else:
+            return wtp_changes        
+        
+        
     def upp(self, cd, upp_dict1, upp_dict2, div_shares):
         """
         Calculate Upward Pricing Pressure (UPP)  using estimated diversions for
@@ -1152,3 +1283,15 @@ class DiscreteChoice():
                             'avg_upp': avg_upp}, index = [0])
         
         return upp
+
+    def export_upp(self, upp, cd=None, export=True, output_type="excel", file_path=None, sheet_name="UPP"):
+        if type(export) != bool:
+            raise ValueError("Export parameter must be type bool")
+        out = upp
+        out = out.T
+        out = out.reset_index()
+        out.columns = ["Entity", "UPP"]
+        if export:
+            self._export(file_path, output_type, out, sheet_name=sheet_name)
+        else:
+            return out    

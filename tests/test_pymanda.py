@@ -667,125 +667,230 @@ def test_DC_semiparam_predict_wght(semi_dc, semi_cd_wght, semi_div):
     assert test.round(decimals=4).equals(actual)
 
 #tests for diversions    
-def test_DC_semiparm_diversion(semi_dc, semi_cd):
+
+@pytest.fixture
+def dc_semiparam_diversion():
+    dc_semiparam_diversion = pd.DataFrame({'a': [np.NaN, .4143, .5857],
+                           'b': [.5291, np.NaN, .4709],
+                           'c': [.6905, .3095, np.NaN]},
+                          index = ['a', 'b', 'c'])
+    
+    return dc_semiparam_diversion
+def test_DC_semiparm_diversion(semi_dc, semi_cd, dc_semiparam_diversion):
     
     semi_dc.fit(semi_cd)
     
     choice_probs = semi_dc.predict(semi_cd)  
     test = semi_dc.diversion(semi_cd, choice_probs, div_choices=['a', 'b', 'c'])
     
-    actual = pd.DataFrame({'a': [np.NaN, .4143, .5857],
-                           'b': [.5291, np.NaN, .4709],
-                           'c': [.6905, .3095, np.NaN]},
-                          index = ['a', 'b', 'c'])
+    actual = dc_semiparam_diversion
     
     assert test.round(decimals=4).equals(actual)
     
-def test_DC_semiparm_diversion_wght(semi_dc, semi_cd_wght):
+def test_DC_semiparm_diversion_wght(semi_dc, semi_cd_wght, dc_semiparam_diversion):
     
     semi_dc.fit(semi_cd_wght)
     
     choice_probs = semi_dc.predict(semi_cd_wght)  
     test = semi_dc.diversion(semi_cd_wght, choice_probs, div_choices=['a', 'b', 'c'])
     
-    actual = pd.DataFrame({'a': [np.NaN, .4143, .5857],
-                           'b': [.5291, np.NaN, .4709],
-                           'c': [.6905, .3095, np.NaN]},
-                          index = ['a', 'b', 'c'])
+    actual = dc_semiparam_diversion
     
     assert test.round(decimals=4).equals(actual)
     
-def test_DC_semiparm_diversion_2choice(semi_dc, semi_cd):
+def test_DC_semiparm_diversion_2choice(semi_dc, semi_cd,dc_semiparam_diversion):
     
     semi_dc.fit(semi_cd)
     
     choice_probs = semi_dc.predict(semi_cd)  
     test = semi_dc.diversion(semi_cd, choice_probs, div_choices=['a', 'b'])
     
-    actual = pd.DataFrame({'a': [np.NaN, .4143, .5857],
-                           'b': [.5291, np.NaN, .4709]},
-                          index = ['a', 'b', 'c'])
+    actual = dc_semiparam_diversion.drop(columns=['c'])
     
     assert test.round(decimals=4).equals(actual)
 
-def test_DC_semiparam_fit_corp(semi_dc, semi_cd_corp):
+@pytest.fixture
+def dc_semiparam_corp_divs():
+    dc_semiparam_corp_divs = pd.DataFrame({'a': [np.NaN, np.NaN, .1143, .3, .2571, .3286],
+                           'b': [.3259, .2032, np.NaN, np.NaN, .1778, .2931],
+                           'c': [.3788, .3117, .2576, .0519, np.NaN, np.NaN]},
+                          index = ['u', 'v', 'w', 'x', 'y', 'z'])
+    
+    return dc_semiparam_corp_divs
+    
+def test_DC_semiparam_fit_corp(semi_dc, semi_cd_corp, dc_semiparam_corp_divs):
     
     semi_dc.fit(semi_cd_corp)
     choice_probs = semi_dc.predict(semi_cd_corp)
     
     test = semi_dc.diversion(semi_cd_corp, choice_probs, div_choices=['a', 'b', 'c'])
     
-    actual = pd.DataFrame({'a': [np.NaN, np.NaN, .1143, .3, .2571, .3286],
-                           'b': [.3259, .2032, np.NaN, np.NaN, .1778, .2931],
-                           'c': [.3788, .3117, .2576, .0519, np.NaN, np.NaN]},
-                          index = ['u', 'v', 'w', 'x', 'y', 'z'])
+    actual = dc_semiparam_corp_divs
     
     assert test.round(decimals=4).equals(actual)
     
-def test_DC_semiparam_fit_div_shares_col(semi_dc, semi_cd_corp):
+@pytest.fixture
+def dc_semiparam_corp_divs_choice():
+    dc_semiparam_corp_divs_choice = pd.DataFrame({'u': [np.NaN, .0952, .2041, .1905, .4592, .051]},
+                          index = ['u', 'v', 'w', 'x', 'y', 'z'])
+    
+    return dc_semiparam_corp_divs_choice
+
+def test_DC_semiparam_fit_div_shares_col(semi_dc, semi_cd_corp, dc_semiparam_corp_divs_choice):
     
     semi_dc.fit(semi_cd_corp)
     choice_probs = semi_dc.predict(semi_cd_corp)
     
     test = semi_dc.diversion(semi_cd_corp, choice_probs, div_choices=['u'], div_choices_var = semi_cd_corp.choice_var)
     
-    actual = pd.DataFrame({'u': [np.NaN, .0952, .2041, .1905, .4592, .051]},
-                          index = ['u', 'v', 'w', 'x', 'y', 'z'])
+    actual = dc_semiparam_corp_divs_choice
     
     assert test.round(decimals=4).equals(actual)  
     
+# tests for export_diversions
+def test_ExportDiversions_corp_to_choice(semi_dc, semi_cd_corp, dc_semiparam_corp_divs):
+    semi_dc.fit(semi_cd_corp)
+
+    test = semi_dc.export_diversions(dc_semiparam_corp_divs, semi_cd_corp, export=False)
+    
+    a = [1, .5857, .3286, .2571, .4143, .3, .1143]
+    a_df = pd.DataFrame({'corp': ['Total', 'c', 'c', 'c', 'b', 'b', 'b'],
+                         'choice': ['Total', 'Total', 'z', 'y', 'Total', 'x', 'w'],
+                         'a': a,
+                         'a_diverted': [x * 560 for x in a]},
+                          dtype='object')
+    
+    b = [1, .5291, .3259, .2032, .4709, .2931, .1778]
+    b_df = pd.DataFrame({'corp': ['Total', 'a', 'a', 'a', 'c', 'c', 'c'],
+                         'choice': ['Total', 'Total', 'u', 'v', 'Total', 'z', 'y'],
+                         'b': b,
+                         'b_diverted': [x *220 for x in b]},
+                         dtype='object')
+    
+    c = [1, .6905, .3788, .3117, .3095, .2576, .0519]
+    c_df = pd.DataFrame({'corp': ['Total', 'a', 'a', 'a', 'b', 'b', 'b'],
+                        'choice': ['Total', 'Total', 'u', 'v', 'Total', 'w', 'x'],
+                        'c': c,
+                        'c_diverted': [x * 220 for x in c]},
+                         dtype='object')
+    
+    answer = {'a': a_df,
+              'b': b_df,
+              'c': c_df}
+    
+    assert dictionary_comparison(test, answer)
+    
+def test_ExportDiversions_choice_to_choice(semi_dc, semi_cd_corp, dc_semiparam_corp_divs_choice):
+    semi_dc.fit(semi_cd_corp)
+
+    test = semi_dc.export_diversions(dc_semiparam_corp_divs_choice, semi_cd_corp, export=False)
+    
+    u = [1, .5102, .4592, .051, .3946, .2041, .1905, .0952, .0952]
+    u_df = pd.DataFrame({'corp': ['Total', 'c', 'c', 'c', 'b', 'b', 'b', 'a', 'a'],
+                         'choice': ['Total', 'Total', 'y', 'z', 'Total', 'w', 'x', 'Total', 'v'],
+                         'u': u,
+                         'u_diverted': [x * 300 for x in u]},
+                        dtype='object')
+    answer = {'u': u_df}    
+    
+    assert dictionary_comparison(test, answer)
+
+def test_ExportDiversions_OneChoice(semi_dc, semi_cd, dc_semiparam_diversion):
+    semi_dc.fit(semi_cd, use_corp=True)
+
+    test = semi_dc.export_diversions(dc_semiparam_diversion[['a']], semi_cd, export=False)
+    
+    a = [1, .5857, .4143]
+    answer = {'a': pd.DataFrame({'choice': ['Total', 'c', 'b'],
+                                 'a': a,
+                                 'a_diverted': [x * 560 for x in a]},
+                                dtype='object')}
+    
+    assert dictionary_comparison(test, answer)
+
 # tests for wtp_change()
-def test_wtpchange(semi_cd):
+@pytest.fixture
+def wtp_change():
+    actual_df = pd.DataFrame({'a': [912.6297],
+                      'b': [287.4548],
+                      'combined': [1574.0460],
+                      'wtp_change': [.3116]})
+
+    wtp_change = {'trans': actual_df}
+    
+    return wtp_change
+    
+
+def test_wtpchange(semi_cd, wtp_change):
     semi_dc = DiscreteChoice(solver='semiparametric', coef_order = ['x1', 'x2', 'x3'], min_bin=180)
 
     semi_dc.fit(semi_cd)
     y_hat = semi_dc.predict(semi_cd)  
     
-    test = semi_dc.wtp_change(semi_cd, y_hat, ['a', 'b'])
+    test = semi_dc.wtp_change(semi_cd, y_hat, {'trans': ['a', 'b']})
+    test['trans'] = test['trans'].round(decimals=4)
     
-    actual = pd.DataFrame({'a': [912.6297],
-                          'b': [287.4548],
-                          'combined': [1574.0460],
-                          'wtp_change': [.3116]})
+    actual = wtp_change
     
-    assert test.round(decimals=4).equals(actual)
+    assert dictionary_comparison(test, actual)
 
-def test_wtpchange_wght(semi_cd_wght):
+def test_wtpchange_multiple(semi_cd, wtp_change):
+    semi_dc = DiscreteChoice(solver='semiparametric', coef_order = ['x1', 'x2', 'x3'], min_bin=180)
+
+    semi_dc.fit(semi_cd)
+    y_hat = semi_dc.predict(semi_cd)  
+    
+    transactions = {'trans': ['a', 'b'],
+                    'trans2': ['b', 'c']}
+    
+    test = semi_dc.wtp_change(semi_cd, y_hat, transactions)
+    test['trans'] = test['trans'].round(decimals=4)
+    test['trans2'] = test['trans2'].round(decimals=4)
+
+    actual = wtp_change
+    actual.update({'trans2': pd.DataFrame({'b':  [287.4548],
+                      'c': [252.4201],
+                      'combined': [710.9841],
+                      'wtp_change': [.3169]})})
+    
+    assert dictionary_comparison(test, actual)
+    
+def test_wtpchange_wght(semi_cd_wght, wtp_change):
     semi_dc = DiscreteChoice(solver='semiparametric', coef_order = ['x1', 'x2', 'x3'], min_bin=180)
 
     semi_dc.fit(semi_cd_wght)
     choice_probs = semi_dc.predict(semi_cd_wght)  
     
-    test = semi_dc.wtp_change(semi_cd_wght, choice_probs, ['a', 'b'])
+    test = semi_dc.wtp_change(semi_cd_wght, choice_probs, {'trans':['a', 'b']})
+    test['trans'] = test['trans'].round(decimals=4)
+
+    actual = wtp_change
     
-    actual = pd.DataFrame({'a': [912.6297],
-                          'b': [287.4548],
-                          'combined': [1574.0460],
-                          'wtp_change': [.3116]})
-    
-    assert test.round(decimals=4).equals(actual)
+    assert dictionary_comparison(test, actual)
     
 def test_wtpchange_warning(semi_cd, semi_dc):
     semi_dc.fit(semi_cd)
     y_hat = semi_dc.predict(semi_cd)  
     
     with pytest.warns(RuntimeWarning) as record:
-        semi_dc.wtp_change(semi_cd, y_hat, ['a', 'b'])
+        semi_dc.wtp_change(semi_cd, y_hat, {'trans':['a', 'b']})
     
     assert len(record) == 1
+    
     
 def test_wtpchange_warning_results(semi_cd, semi_dc):
     semi_dc.fit(semi_cd)
     y_hat = semi_dc.predict(semi_cd)  
     
     with pytest.warns(RuntimeWarning):
-        test = semi_dc.wtp_change(semi_cd, y_hat, ['a', 'b'])
+        test = semi_dc.wtp_change(semi_cd, y_hat, {'trans':['a', 'b']})
     
-    actual = pd.DataFrame({'a': [np.inf],
+    actual = {'trans': pd.DataFrame({'a': [np.inf],
                           'b': [np.inf],
                           'combined': [np.inf],
                           'wtp_change': [np.NaN]})
-    assert test.equals(actual)
+              }
+    assert dictionary_comparison(test, actual)
     
 #tests for DiscreteChoice.upp
 def test_upp(semi_cd, semi_dc):
