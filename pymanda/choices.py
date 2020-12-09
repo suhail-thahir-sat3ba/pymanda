@@ -1064,7 +1064,10 @@ class DiscreteChoice():
             base_share = cd.calculate_shares()
             base_share = cd.export_shares(base_share, export=False)
             base_share = base_share['Base Shares']
-            
+            if cd.wght_var is not None:
+                base_share = base_share.drop(columns=[cd.wght_var + "_Base Shares"])
+            else:
+                base_share = base_share.drop(columns=["count" + "_Base Shares"])
             
             # add subtotals
             if cd.corp_var != cd.choice_var:
@@ -1305,4 +1308,4 @@ class DiscreteChoice():
         if export:
             self._export(file_path, output_type, upp, sheet_name=sheet_name)
         else:
-            return out    
+            return upp    
