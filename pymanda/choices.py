@@ -465,41 +465,71 @@ class ChoiceData():
                 raise ValueError('''corp_var can only be True if corp_var is different from choice_var''')
                 
         shares_inputs = ["counts", 0, 1]
-        if shares_axis not in shares_inputs:
-            raise ValueError("shares must be in {inputs}. Got {s}".format(inputs=shares_inputs, s=shares_axis))
-        
-        df = self.data.copy()
-        
-        if weight_var is None:
-            df['count'] = 1
-            weight_var = 'count'
-        
-        if corp_var:
-            group = [self.corp_var]
+        if type(shares_axis) != list:
+            if shares_axis not in shares_inputs:
+                raise ValueError("shares_axis must be {inputs}. Got {s}".format(inputs=shares_inputs, s=shares_axis))
+            
+            shares_axis = [shares_axis]
+            
         else:
-            group = [self.corp_var, self.choice_var]
+            for s in shares_axis:
+                if s not in shares_inputs:
+                    raise ValueError("All elements of shares_axis must be in {inputs}".format(inputs=shares_inputs))
         
-        df = df.groupby(group + [levels_var]).sum(weight_var)
-        df= df.reset_index()
-        df = df.pivot_table(values=weight_var, index=group, columns=levels_var, fill_value=0)   
-        
-        if not rows_as_levels:
-            if shares_axis == 0:
-                df = df / df.sum(axis=0)
-            elif shares_axis == 1:
-                df = df.T / df.sum(axis=1)
-                df = df.T
-        if rows_as_levels:
-            if shares_axis == "counts":
-                df= df.T
-            elif shares_axis == 0:
-                df = df.T / df.sum(axis=1)
-            elif shares_axis == 1:
-                df = df / df.sum(axis=0)
-                df = df.T
-        
-        return df
+        data_merges = []
+        for axis in shares_axis:
+            df = self.data.copy()
+            
+            if weight_var is None:
+                df['count'] = 1
+                weight_var = 'count'
+                reset_weight=True
+            
+            if corp_var:
+                group = [self.corp_var]
+            else:
+                group = [self.corp_var, self.choice_var]
+            
+            df = df.groupby(group + [levels_var]).sum(weight_var)
+            df= df.reset_index()
+            df = df.pivot_table(values=weight_var, index=group, columns=levels_var, fill_value=0)   
+            
+            if not rows_as_levels:
+                if axis == 0:
+                    df = df / df.sum(axis=0)
+                elif axis == 1:
+                    df = df.T / df.sum(axis=1)
+                    df = df.T
+            if rows_as_levels:
+                if axis == "counts":
+                    df= df.T
+                elif axis == 0:
+                    df = df.T / df.sum(axis=1)
+                elif axis == 1:
+                    df = df / df.sum(axis=0)
+                    df = df.T
+                    
+            if rows_as_levels and len(group) > 1:    
+                df.columns = df.columns.set_levels([str(x) + "_{}".format(axis) for x in df.columns.levels[-1]], level=-1)
+            else:
+                df.columns = [str(x) + "_{}".format(axis) for x in df.columns]
 
+            data_merges.append(df)
+            
+            if reset_weight:
+                weight_var=None
+        
+        if len(data_merges) > 1:
+            output=pd.DataFrame(index=data_merges[0].index)
+            cols = len(data_merges[0].columns)
+            for c_index in range(cols):
+                output = pd.concat([output] + [data_merges[n].iloc[:,c_index] for n in range(len(data_merges))], axis=1)
+        
+        else:
+            output = data_merges[0]
+        
+        return output
+    
     def shares_checks(self, df, share_col, data="Data"):
         """
         Checks for columns that are supposed to contain shares
@@ -619,7 +649,111 @@ class ChoiceData():
                 self._export(file_path, output_type, output, sheet_name=key)
         else:
             return final_out
+    
+    def export_stratified(self, strat_df, export=True, output_type="excel", sheet_name="Stratified", file_path=None, row_totals=False, col_totals=True):
+        """
+        Export Options for output from stratified_shares()
 
+        Parameters
+        ----------
+        strat_df : pandas.core.frame.DataFrame
+            Output from stratified_shares().
+        export : Bool, optional
+            Boolean to export data. The default is True.
+        output_type : string, optional
+            Export file format. The default is "excel".
+        sheet_name: string, optional
+            Sheet name for export.
+        file_path : string, optional
+            Destination to export files. The default is None.
+        row_totals : bool, optional
+            Whether to add rowsum totals to export. The default is False.
+        col_totals : bool, optional
+            Whether to add column totals. The default is True.
+
+        Returns
+        -------
+        strat_df : pandas.core.frame.DataFrame
+            Return output when export=False.
+
+        """
+        if type(export) != bool:
+            raise ValueError("Export parameter must be type bool")
+            
+        if type(strat_df) != pd.core.frame.DataFrame:
+            raise TypeError("strat_df expoected pandas.core.frame.DataFrame. Got {}".format(type(strat_df)))
+    
+        if self.corp_var != self.choice_var:
+            merge_vars = [self.corp_var, self.choice_var]
+        else:
+            merge_vars = [self.choice_var]        
+        
+        # determie whether to count subtotals if index contains corp_var and choice_var
+        calc_subtotals = False
+        if strat_df.index.names==merge_vars:
+            calc_subtotals = True
+        
+        if row_totals:
+            cols = strat_df.columns
+            tag_matches = []
+            for tag in ["counts", "0", "1"]:
+                sub_match = []
+                for col in cols:
+                    col = col.rsplit("_")
+                    sub_match.append(col[-1]==tag)
+                tag_matches.append(any(sub_match))
+            
+            if sum(tag_matches) > 1:
+                raise ValueError("row_totals can not be used with more than one type of stratified column")
+            
+        strat_df = strat_df.reset_index()
+        
+        if col_totals:
+            sums = pd.DataFrame({"totals": strat_df.sum()})
+            sums = sums.T
+            
+            for str_col in merge_vars:
+                sums[str_col] = "Total"
+            
+            strat_df = sums.append(strat_df)
+            
+        if calc_subtotals:
+            if col_totals:
+                subtotals = strat_df[1:].groupby(self.corp_var).sum()
+            else:
+                subtotals = strat_df.groupby(self.corp_var).sum()
+                
+            subtotals[self.choice_var] = "AAAAA"
+                        
+            subtotals = subtotals.reset_index()
+                        
+            strat_df = strat_df.append(subtotals)
+            
+            if col_totals:
+                strat_df["total sorter"] = np.where(strat_df[self.corp_var] == "Total", 0,1)
+                strat_df = strat_df.sort_values(["total sorter"] + merge_vars)
+                strat_df = strat_df.drop(columns=["total sorter"])
+            else:
+                strat_df = strat_df.sort_values(merge_vars)
+            
+            strat_df[self.choice_var] = strat_df[self.choice_var].str.replace("AAAAA", "Total")
+            
+        if row_totals:
+            num_cols = strat_df.columns[~strat_df.columns.isin(merge_vars)]
+            row_tots = strat_df[num_cols].sum(axis=1)
+            row_tots.name = "Row Totals"
+            strat_df = pd.concat([strat_df[merge_vars], row_tots, strat_df[num_cols]],axis=1)
+            
+        strat_df = strat_df.reset_index(drop=True)
+        
+        
+        if export:
+            self._export(file_path, output_type, output, sheet_name=sheet_name)
+        else:
+            return strat_df
+            
+            
+        
      
     def calculate_hhi(self, shares_dict, share_col="count_share", group_col=None):
         """
