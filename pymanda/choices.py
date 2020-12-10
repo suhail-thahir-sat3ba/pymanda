@@ -748,7 +748,7 @@ class ChoiceData():
         
         
         if export:
-            self._export(file_path, output_type, output, sheet_name=sheet_name)
+            self._export(file_path, output_type, strat_df, sheet_name=sheet_name)
         else:
             return strat_df
             
