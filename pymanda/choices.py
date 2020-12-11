@@ -553,6 +553,44 @@ class ChoiceData():
         if df[share_col].sum() != 1:
             raise ValueError ("Values of '{col}' in {d} do not sum to 1".format(col=share_col, d=data))
     
+    def calculate_overlap(self, centers, overlap_var, corp_var=False, threshold=[.75, .9], overlap_min=3, weight_var=None):
+        df = self.data.copy()
+        
+        if weight_var is None:
+            weight_var= self.wght_var
+        
+        if weight_var is None:
+            df['count'] = 1
+            weight_var = 'count'
+            reset_weight=True
+            
+        if corp_var:
+            group = [self.corp_var]
+        else:
+            group = [self.choice_var]
+    
+        df = df.groupby([overlap_var] + group).sum(weight_var)
+        df = df[weight_var].unstack()
+        df = df[centers]
+        
+        df = df >= overlap_min
+        df = df[df.sum(axis=1) == len(centers)]
+        
+        overlaps = list(df.index)
+        
+        if reset_weight:
+            weight_var=None
+        
+        cd_df = self.data.copy()
+        cd_df = cd_df[cd_df[overlap_var].isin(overlaps)]
+        cd_temp = ChoiceData(cd_df, self.choice_var, corp_var=self.choice_var, wght_var=weight_var, geog_var=self.geog_var)
+        
+        psas = cd_temp.estimate_psa(centers=centers, threshold=threshold)
+        
+        shares = cd_temp.calculate_shares(psa_dict=psas, weight_var=weight_var)
+        
+        return shares
+
     def export_shares(self, output_dict, export=True, output_type="excel", file_path=None):
         """
         Formatting options for calculate_shares() output
@@ -750,10 +788,7 @@ class ChoiceData():
         if export:
             self._export(file_path, output_type, strat_df, sheet_name=sheet_name)
         else:
-            return strat_df
-            
-            
-        
+            return strat_df        
      
     def calculate_hhi(self, shares_dict, share_col="count_share", group_col=None):
         """
