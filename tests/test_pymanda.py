@@ -595,6 +595,14 @@ def test_ExportStratified_rowtotals(semi_cd_corp, stratified_share_counts):
     
     assert test.equals(answer)
 
+# Tests for calculate_overlap
+
+def test_OverlapShares(semi_cd_corp):
+    test = semi_cd_corp.calculate_overlap(['u', 'v'], 'x3', overlap_min=50)
+    
+    
+    return True
+
 # Tests for DiscreteChoice
 @pytest.fixture
 def semi_cd():
