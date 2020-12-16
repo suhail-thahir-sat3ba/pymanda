@@ -447,15 +447,14 @@ def test_ExportHHI_Change(cd_psa, MultiHHIChange, hhi_index):
 # Tests for stratify_shares
 @pytest.fixture
 def stratified_share_counts(): # based on semi_cd_corp
-    stratified_share_counts = pd.DataFrame({"0_counts":[220, 0, 110, 30, 110, 30],
-                                            "1_counts":[80, 260, 0, 80, 0, 80]},
-                                           index = ['u', 'v', 'w', 'x', 'y', 'z'])
+    stratified_share_counts = pd.DataFrame({"corp": ["Total", "a", 'a', 'a', 'b', 'b', 'b', 'c', 'c', 'c'],
+                                            "choice": ['Total', 'Total', 'u', 'v', 'Total', 'w', 'x', 'Total', 'y', 'z'],
+                                            "Row Totals":[1000, 560, 300, 260, 220, 110, 110, 220, 110, 110],
+                                            "0_counts":[500, 220, 220, 0, 140, 110, 30, 140, 110, 30],
+                                            "1_counts":[500, 340, 80, 260, 80, 0, 80, 80, 0, 80]},
+                                             dtype="object")
     
-    stratified_share_counts.index.name = "choice"
-    stratified_share_counts['corp'] = ['a', 'a', 'b', 'b', 'c', 'c']
-    stratified_share_counts = stratified_share_counts.reset_index()
-    stratified_share_counts = stratified_share_counts.set_index(['corp', 'choice'])
-    
+    stratified_share_counts = {'Base Stratified': stratified_share_counts}
     return stratified_share_counts
 
 @pytest.fixture
@@ -468,14 +467,26 @@ def stratified_share_cols(): # based on semi_cd_corp
     stratified_share_cols['corp'] = ['a', 'a', 'b', 'b', 'c', 'c']
     stratified_share_cols = stratified_share_cols.reset_index()
     stratified_share_cols = stratified_share_cols.set_index(['corp', 'choice'])
+    stratified_share_cols =stratified_share_cols.reset_index()
+    
+    stratified_share_cols = {'Base Stratified': stratified_share_cols}
     
     return stratified_share_cols
 
 @pytest.fixture
 def stratified_share_rows(stratified_share_counts): # based on semi_cd_corp
-    stratified_share_rows = (stratified_share_counts.T / stratified_share_counts.sum(axis=1)).T
+    df = stratified_share_counts['Base Stratified']
+    df = df[~df['choice'].isin(["Total"])]
+    df = df.set_index(["corp", "choice"])
+    df = df.drop(columns=["Row Totals"])
+    stratified_share_rows = (df.T / df.sum(axis=1)).T
     stratified_share_rows= stratified_share_rows.rename(columns = {"0_counts": "0_1",
                                                          "1_counts" : "1_1"})
+    stratified_share_rows = stratified_share_rows.reset_index()
+    stratified_share_rows['0_1'] = stratified_share_rows['0_1'].astype('float')
+    stratified_share_rows['1_1'] = stratified_share_rows['1_1'].astype('float')
+
+    stratified_share_rows = {'Base Stratified': stratified_share_rows}
     return stratified_share_rows
 
 @pytest.fixture
@@ -491,17 +502,45 @@ def startified_share_count_cols():
     startified_share_count_cols = startified_share_count_cols.reset_index()
     startified_share_count_cols = startified_share_count_cols.set_index(['corp', 'choice'])    
     
+    startified_share_count_cols = {'Base Stratified': startified_share_count_cols}
+    
     return startified_share_count_cols
+
+@pytest.fixture
+def strat_cd(psa_data):
+    strat_psa = psa_data
+    
+    stratified = [1 for x in range(15)]
+    stratified += [2 for x in range(10)]
+    stratified += [3 for x in range(13)]
+    stratified += [4 for x in range(12)] # out of psa x_75
+    
+    stratified += [2 for x in range(19)] # out
+    stratified += [1 for x in range(2)]
+    stratified += [2 for x in range(2)] 
+    stratified += [3 for x in range(2)] # out
+    
+    stratified += [4 for x in range(19)] # out
+    stratified += [3 for x in range(4)]
+    stratified += [2 for x in range(2)] # out
+    
+    strat_psa['stratified'] = stratified
+    
+    strat_cd = ChoiceData(strat_psa, 'choice', 'corporation', 'geography')
+    
+    return strat_cd
+    
 
 def test_StratifiedShares(stratified_share_counts, semi_cd_corp):
     test = semi_cd_corp.stratify_shares("x1")
 
     answer = stratified_share_counts
+    answer['Base Stratified'] = answer['Base Stratified'].drop(columns=["Row Totals"])
     
-    assert test.equals(answer)
+    assert dictionary_comparison(test, answer)
     
 def test_StratifiedShares_RowsAsLevels(stratified_share_counts, semi_cd_corp):
-    test = semi_cd_corp.stratify_shares("x1", rows_as_levels=True)
+    test = semi_cd_corp.stratify_shares("x1", rows_as_levels=True, subtotals=False, col_totals=False)
 
     answer = pd.DataFrame({0:[220, 0, 110, 30, 110, 30],
                            1:[80, 260, 0, 80, 0, 80]},
@@ -513,73 +552,78 @@ def test_StratifiedShares_RowsAsLevels(stratified_share_counts, semi_cd_corp):
     answer = answer.set_index(['corp', 'choice'])  
     answer = answer.T
     answer.index.name = "x1"
+    answer = answer.reset_index()
+    answer = {'Base Stratified': answer}
     
-    assert test.equals(answer)
+    assert dictionary_comparison(test, answer)
     
 def test_StratifiedShares_Axis0(stratified_share_cols, semi_cd_corp):
-    test = semi_cd_corp.stratify_shares("x1", shares_axis=0)
+    test = semi_cd_corp.stratify_shares("x1", shares_axis=0, subtotals=False, col_totals=False)
 
     answer = stratified_share_cols
     
-    assert test.equals(answer)
+    assert dictionary_comparison(test, answer)
         
 def test_StratifiedShares_Axis1(stratified_share_rows, semi_cd_corp):
-    test = semi_cd_corp.stratify_shares("x1", shares_axis=1)
+    test = semi_cd_corp.stratify_shares("x1", shares_axis=1, subtotals=False, col_totals=False)
 
     answer = stratified_share_rows
     
-    assert test.equals(answer)
+    assert dictionary_comparison(test, answer)
     
 def test_StratifiedShares_RowsAsLevels_Axis0(semi_cd_corp, stratified_share_cols):
-    test = semi_cd_corp.stratify_shares("x1", shares_axis=0)
+    test = semi_cd_corp.stratify_shares("x1", shares_axis=0, subtotals=False, col_totals=False)
     
     answer = stratified_share_cols
 
-    assert test.equals(answer)
+    assert dictionary_comparison(test, answer)
 
 def test_StratifiedShares_RowsAsLevels_Axis1(semi_cd_corp, stratified_share_rows):
-    test = semi_cd_corp.stratify_shares("x1", shares_axis=1)
+    test = semi_cd_corp.stratify_shares("x1", shares_axis=1, subtotals=False, col_totals=False)
     
     answer = stratified_share_rows
 
-    assert test.equals(answer)
+    assert dictionary_comparison(test, answer)
     
 def test_StratifiedShares_multiaxis(semi_cd_corp, startified_share_count_cols):
-    test = semi_cd_corp.stratify_shares("x1", shares_axis=['counts', 0])
+    test = semi_cd_corp.stratify_shares("x1", shares_axis=['counts', 0], subtotals=False, col_totals=False)
     
     answer = startified_share_count_cols
+    answer['Base Stratified'] = answer['Base Stratified'].reset_index()
 
-    assert test.equals(answer)    
+    assert dictionary_comparison(test, answer)
     
     
 # Tests for export stratified
-def test_ExportStratified_MultipleAxesError(semi_cd_corp, startified_share_count_cols):
+def test_Stratified_MultipleAxesError(semi_cd_corp, startified_share_count_cols):
     
     with pytest.raises(ValueError):
-        semi_cd_corp.export_stratified(startified_share_count_cols, export=False, row_totals=True)
+        semi_cd_corp.stratify_shares(levels_var="x1", shares_axis=["counts", 1], row_totals=True)
         
 
 def test_ExportStratified_columntotals(semi_cd_corp, startified_share_count_cols):
     
-    test = semi_cd_corp.export_stratified(startified_share_count_cols, col_totals=True, export=False)
+    test = semi_cd_corp.stratify_shares("x1", shares_axis=['counts', 0], col_totals=True)
 
     answer = pd.DataFrame({"0_counts":[500, 220, 220, 0, 140,  110, 30, 140, 110, 30],
-                                            "0_0":[x / 500 for x in [500, 220, 220, 0, 140,  110, 30, 140, 110, 30]],
-                                            "1_counts":[500, 340, 80, 260, 80,  0, 80, 80, 0, 80],
-                                            "1_0":[x / 500 for x in [500, 340, 80, 260, 80,  0, 80, 80, 0, 80]]},
-                                           index = ['Total', 'Total', 'u', 'v', 'Total', 'w', 'x', 'Total', 'y', 'z'],
-                                           dtype="object")
+                         "0_0":[x / 500 for x in [500, 220, 220, 0, 140,  110, 30, 140, 110, 30]],
+                         "1_counts":[500, 340, 80, 260, 80,  0, 80, 80, 0, 80],
+                         "1_0":[x / 500 for x in [500, 340, 80, 260, 80,  0, 80, 80, 0, 80]]},
+                        index = ['Total', 'Total', 'u', 'v', 'Total', 'w', 'x', 'Total', 'y', 'z'],
+                        dtype="object")
     
     answer.index.name = "choice"
     answer['corp'] = ['Total', 'a', 'a', 'a', 'b', 'b', 'b', 'c', 'c', 'c']
     answer = answer.reset_index()
-    answer = answer[['corp', 'choice', '0_counts', '0_0', '1_counts', '1_0']]  
+    answer = answer[['corp', 'choice', '0_counts', '0_0', '1_counts', '1_0']]
     
-    assert test.equals(answer)
+    answer = {'Base Stratified': answer}
     
-def test_ExportStratified_rowtotals(semi_cd_corp, stratified_share_counts):
+    assert dictionary_comparison(test, answer)
     
-    test = semi_cd_corp.export_stratified(stratified_share_counts, row_totals=True, export=False)
+def test_Stratified_rowtotals(semi_cd_corp, stratified_share_counts):
+    
+    test = semi_cd_corp.stratify_shares("x1", row_totals=True)
     
     answer = pd.DataFrame({"Row Totals":[1000, 560, 300, 260, 220, 110, 110, 220, 110, 110],
                             "0_counts":[500, 220, 220, 0, 140, 110, 30, 140, 110, 30],
@@ -593,7 +637,9 @@ def test_ExportStratified_rowtotals(semi_cd_corp, stratified_share_counts):
     answer = answer[['corp', 'choice', 'Row Totals', '0_counts', '1_counts']]  
     answer['Row Totals'] = answer['Row Totals'].astype("float")
     
-    assert test.equals(answer)
+    answer = {'Base Stratified': answer}
+    
+    assert dictionary_comparison(test, answer)
 
 # Tests for DiscreteChoice
 @pytest.fixture

@@ -425,7 +425,9 @@ class ChoiceData():
 
         return output_dict
     
-    def stratify_shares(self, levels_var, weight_var=None, rows_as_levels=False, shares_axis="counts", corp_var = False):
+    def stratify_shares(self, levels_var, weight_var=None, rows_as_levels=False, shares_axis="counts", 
+                        corp_var = False, psas=None, row_totals=False, col_totals=True, outmigration=False,
+                        subtotals=True):
         """
         Calculate shares while stratifying on a variable
 
@@ -469,66 +471,190 @@ class ChoiceData():
             if shares_axis not in shares_inputs:
                 raise ValueError("shares_axis must be {inputs}. Got {s}".format(inputs=shares_inputs, s=shares_axis))
             
-            shares_axis = [shares_axis]
-            
+            shares_axis = [shares_axis]    
         else:
             for s in shares_axis:
                 if s not in shares_inputs:
                     raise ValueError("All elements of shares_axis must be in {inputs}".format(inputs=shares_inputs))
-        
-        data_merges = []
-        for axis in shares_axis:
-            df = self.data.copy()
-            
-            if weight_var is None:
-                df['count'] = 1
-                weight_var = 'count'
-                reset_weight=True
-            
-            if corp_var:
-                group = [self.corp_var]
-            else:
-                group = [self.corp_var, self.choice_var]
-            
-            df = df.groupby(group + [levels_var]).sum(weight_var)
-            df= df.reset_index()
-            df = df.pivot_table(values=weight_var, index=group, columns=levels_var, fill_value=0)   
-            
-            if not rows_as_levels:
-                if axis == 0:
-                    df = df / df.sum(axis=0)
-                elif axis == 1:
-                    df = df.T / df.sum(axis=1)
-                    df = df.T
-            if rows_as_levels:
-                if axis == "counts":
-                    df= df.T
-                elif axis == 0:
-                    df = df.T / df.sum(axis=1)
-                elif axis == 1:
-                    df = df / df.sum(axis=0)
-                    df = df.T
                     
-            if rows_as_levels and len(group) > 1:    
-                df.columns = df.columns.set_levels([str(x) + "_{}".format(axis) for x in df.columns.levels[-1]], level=-1)
-            else:
-                df.columns = [str(x) + "_{}".format(axis) for x in df.columns]
-
-            data_merges.append(df)
+        if outmigration and shares_axis != "counts":
+            raise ValueError("Outmigration option only compatible with shares_axis='counts'")
+        
+        if row_totals and len(shares_axis) > 1:
+                raise ValueError("row_totals can not be used with more than one type of stratified column")
+        
+        if outmigration and not rows_as_levels:
+            if not rows_as_levels:
+                raise ValueError("outmigration=True requires rows_as_levels=True")            
+            row_totals=False #outmigration code will automatically add row totals        
             
-            if reset_weight:
-                weight_var=None
-        
-        if len(data_merges) > 1:
-            output=pd.DataFrame(index=data_merges[0].index)
-            cols = len(data_merges[0].columns)
-            for c_index in range(cols):
-                output = pd.concat([output] + [data_merges[n].iloc[:,c_index] for n in range(len(data_merges))], axis=1)
-        
+        if psas is None:
+            psas = {'Base Stratified': []}
+         
+        if self.corp_var != self.choice_var and not corp_var:
+            group = [self.corp_var, self.choice_var]
+        elif corp_var:
+            group = [self.corp_var] 
         else:
-            output = data_merges[0]
+            group = [self.choice_var]           
+         
+        output_dict={}
+        for psa_key in psas.keys():
+            
+            data_merges = []
+            for axis in shares_axis:
+                df = self.data.copy()
+                
+                if psa_key != "Base Stratified":
+                    df = df[df[self.geog_var].isin(psas[psa_key])]                
+                if weight_var is None:
+                    df['count'] = 1
+                    weight_var = 'count'
+                    reset_weight=True
+                
+                df = df.groupby(group + [levels_var]).sum(weight_var)
+                df= df.reset_index()
+                df = df.pivot_table(values=weight_var, index=group, columns=levels_var, fill_value=0)   
+                
+                if not rows_as_levels:
+                    if axis == 0:
+                        df = df / df.sum(axis=0)
+                    elif axis == 1:
+                        df = df.T / df.sum(axis=1)
+                        df = df.T
+                if rows_as_levels:
+                    if axis == "counts":
+                        df= df.T
+                    elif axis == 0:
+                        df = df.T / df.sum(axis=1)
+                    elif axis == 1:
+                        df = df / df.sum(axis=0)
+                        df = df.T
+                        
+                if rows_as_levels and len(group) > 1:    
+                    df.columns = df.columns.set_levels([str(x) + "_{}".format(axis) for x in df.columns.levels[-1]], level=-1)
+                else:
+                    df.columns = [str(x) + "_{}".format(axis) for x in df.columns]
+                    
+                calc_subtotals = False
+                if subtotals:
+                    if list(df.index.names)==[self.corp_var, self.choice_var]:
+                        calc_subtotals = True
+                    else:
+                        raise ValueError("Subtotals can only be calculated when rows_as_levels=False and corp_var is defined")
+                        
+                
+                # Additional options checks
+
+                if outmigration:
+                    if psa_key=="Base Stratified":
+                        raise ValueError("outmigration=True is not possible without PSA restricted data")
+                    
+                    # counts column must be in data
+                    name = psa_key.rsplit("_")[0] + "_counts"
+                    if rows_as_levels and len(group) ==2:
+                        if name not in df.columns.levels[-1]:
+                            raise KeyError("outmigration=True needs column {} in choice level".format(name))
+                    else:
+                        if name not in df.columns:
+                            raise KeyError("outmigration=True needs column {}".format(name))
+                    row_totals=False #outmigration code will automatically add row totals
+                
+                df = df.reset_index()
+                
+                if col_totals:
+                    sums = pd.DataFrame({"totals": df.sum()})
+                    sums = sums.T
+                    
+                    
+                    if rows_as_levels:
+                        total_cols = [levels_var]
+                    else:
+                        total_cols = group
+                        
+                    for str_col in total_cols:
+                        sums[str_col] = "Total"
+                    
+                    df = sums.append(df)
+                    
+                if calc_subtotals:
+                    if col_totals:
+                        subs = df[1:].groupby(self.corp_var).sum()
+                    else:
+                        subs = df.groupby(self.corp_var).sum()
+                        
+                    subs[self.choice_var] = "AAAAA"
+                                
+                    subs = subs.reset_index()
+                                
+                    df = df.append(subs)
+                    
+                    if col_totals:
+                        df["total sorter"] = np.where(df[self.corp_var] == "Total", 0,1)
+                        df = df.sort_values(["total sorter"] + group)
+                        df = df.drop(columns=["total sorter"])
+                    else:
+                        df = df.sort_values(group)
+                    
+                    df[self.choice_var] = df[self.choice_var].str.replace("AAAAA", "Total")
+                    
+                if row_totals:
+                    if rows_as_levels:
+                        num_cols = df.columns[~df.columns.isin([levels_var])]
+                    else:
+                        num_cols = df.columns[~df.columns.isin(group)]
+                    row_tots = df[num_cols].sum(axis=1)
+                    row_tots.name = "Row Totals"
+                    if rows_as_levels:
+                        df = pd.concat([df[levels_var], row_tots, df[num_cols]],axis=1)
+                    else:
+                        df = pd.concat([df[group], row_tots, df[num_cols]],axis=1)
+                    
+                if reset_weight:
+                    weight_var=None
+                    
+                if outmigration:
+                    cd_temp = self
+                    cd_temp.data = self.data.copy()
+                    cd_temp.restrict_data(cd_temp.data[self.geog_var].isin(psas[psa_key]))
+                    
+                    psa_share = cd_temp.stratify_shares(levels_var, weight_var=weight_var, 
+                                                        corp_var=corp_var, rows_as_levels=True, row_totals=True)
+                    
+                    psa_share = psa_share['Base Stratified']
+                    
+                    psa_share = psa_share[[levels_var, "Row Totals"]]
+                    new_name = "PSA Total"
+                    psa_share = psa_share.rename(columns= {"Row Totals": new_name})
+                    
+                    psa_share = psa_share.merge(df, how="right", on=levels_var)
+                    
+                    psa_share['Outmigration'] = psa_share[new_name] - psa_share[name]
+                    
+                    psa_share['Outmigration_Share'] = psa_share['Outmigration'] / psa_share[new_name]
+                    
+                    psa_share = psa_share[[levels_var, 'PSA Total', 'Outmigration', 'Outmigration_Share']]
+                    
+                    df = psa_share.merge(df, how='right', on=levels_var)
+    
+                if rows_as_levels:
+                    df = df.set_index(levels_var)
+                else:
+                    df = df.set_index(group)
+                data_merges.append(df)
+                    
+            if len(data_merges) > 1:
+                output=pd.DataFrame(index=data_merges[0].index)
+                cols = len(data_merges[0].columns)
+                for c_index in range(cols):
+                    output = pd.concat([output] + [data_merges[n].iloc[:,c_index] for n in range(len(data_merges))], axis=1)
+                output = output.reset_index()
+            else:
+                output = data_merges[0].reset_index()
+            
+            output_dict.update({psa_key: output})
         
-        return output
+        return output_dict
     
     def shares_checks(self, df, share_col, data="Data"):
         """
@@ -650,7 +776,7 @@ class ChoiceData():
         else:
             return final_out
     
-    def export_stratified(self, strat_df, export=True, output_type="excel", sheet_name="Stratified", file_path=None, row_totals=False, col_totals=True):
+    def export_stratified(self, strat_dict, export=True, output_type="excel", sheet_name="Stratified", file_path=None):
         """
         Export Options for output from stratified_shares()
 
@@ -680,77 +806,21 @@ class ChoiceData():
         if type(export) != bool:
             raise ValueError("Export parameter must be type bool")
             
-        if type(strat_df) != pd.core.frame.DataFrame:
-            raise TypeError("strat_df expoected pandas.core.frame.DataFrame. Got {}".format(type(strat_df)))
-    
-        if self.corp_var != self.choice_var:
-            merge_vars = [self.corp_var, self.choice_var]
-        else:
-            merge_vars = [self.choice_var]        
+        if type(strat_dict) != dict:
+            raise TypeError("strat_df expoected dict. Got {}".format(type(strat_dict)))
+ 
         
-        # determie whether to count subtotals if index contains corp_var and choice_var
-        calc_subtotals = False
-        if strat_df.index.names==merge_vars:
-            calc_subtotals = True
-        
-        if row_totals:
-            cols = strat_df.columns
-            tag_matches = []
-            for tag in ["counts", "0", "1"]:
-                sub_match = []
-                for col in cols:
-                    col = col.rsplit("_")
-                    sub_match.append(col[-1]==tag)
-                tag_matches.append(any(sub_match))
+        strat_out={}
+        for key in strat_dict.keys():
+            strat_df = strat_dict[key]
             
-            if sum(tag_matches) > 1:
-                raise ValueError("row_totals can not be used with more than one type of stratified column")
-            
-        strat_df = strat_df.reset_index()
-        
-        if col_totals:
-            sums = pd.DataFrame({"totals": strat_df.sum()})
-            sums = sums.T
-            
-            for str_col in merge_vars:
-                sums[str_col] = "Total"
-            
-            strat_df = sums.append(strat_df)
-            
-        if calc_subtotals:
-            if col_totals:
-                subtotals = strat_df[1:].groupby(self.corp_var).sum()
+
+            if export:
+                self._export(file_path, output_type, strat_df, sheet_name=key)
             else:
-                subtotals = strat_df.groupby(self.corp_var).sum()
+                strat_out.update({key: strat_df})    
                 
-            subtotals[self.choice_var] = "AAAAA"
-                        
-            subtotals = subtotals.reset_index()
-                        
-            strat_df = strat_df.append(subtotals)
-            
-            if col_totals:
-                strat_df["total sorter"] = np.where(strat_df[self.corp_var] == "Total", 0,1)
-                strat_df = strat_df.sort_values(["total sorter"] + merge_vars)
-                strat_df = strat_df.drop(columns=["total sorter"])
-            else:
-                strat_df = strat_df.sort_values(merge_vars)
-            
-            strat_df[self.choice_var] = strat_df[self.choice_var].str.replace("AAAAA", "Total")
-            
-        if row_totals:
-            num_cols = strat_df.columns[~strat_df.columns.isin(merge_vars)]
-            row_tots = strat_df[num_cols].sum(axis=1)
-            row_tots.name = "Row Totals"
-            strat_df = pd.concat([strat_df[merge_vars], row_tots, strat_df[num_cols]],axis=1)
-            
-        strat_df = strat_df.reset_index(drop=True)
-        
-        
-        if export:
-            self._export(file_path, output_type, strat_df, sheet_name=sheet_name)
-        else:
-            return strat_df
+        return strat_out
             
             
         
