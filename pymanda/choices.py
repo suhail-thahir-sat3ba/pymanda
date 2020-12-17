@@ -82,7 +82,11 @@ class ChoiceData():
         for nonull in [choice_var, corp_var]:
             if len(data[data[self.choice_var] == ''].index) != 0:
                 raise ValueError ('''{} has missing values'''.format(nonull))
-     
+                
+    def copy(self):
+        copy = ChoiceData(self.data.copy(), self.choice_var, self.corp_var, self.geog_var, self.wght_var)
+        
+        return copy
     def corp_map(self):
         """
         Utility fuction to map corporation and choices in self.data
@@ -465,7 +469,10 @@ class ChoiceData():
         elif corp_var:
             if self.corp_var == self.choice_var:
                 raise ValueError('''corp_var can only be True if corp_var is different from choice_var''')
-                
+                    
+        if outmigration and shares_axis != "counts":
+            raise ValueError("Outmigration option only compatible with shares_axis='counts'")
+            
         shares_inputs = ["counts", 0, 1]
         if type(shares_axis) != list:
             if shares_axis not in shares_inputs:
@@ -475,11 +482,7 @@ class ChoiceData():
         else:
             for s in shares_axis:
                 if s not in shares_inputs:
-                    raise ValueError("All elements of shares_axis must be in {inputs}".format(inputs=shares_inputs))
-                    
-        if outmigration and shares_axis != "counts":
-            raise ValueError("Outmigration option only compatible with shares_axis='counts'")
-        
+                    raise ValueError("All elements of shares_axis must be in {inputs}".format(inputs=shares_inputs))        
         if row_totals and len(shares_axis) > 1:
                 raise ValueError("row_totals can not be used with more than one type of stratified column")
         
@@ -538,14 +541,12 @@ class ChoiceData():
                     
                 calc_subtotals = False
                 if subtotals:
-                    if list(df.index.names)==[self.corp_var, self.choice_var]:
+                    if subtotals and list(df.index.names)==[self.corp_var, self.choice_var]:
                         calc_subtotals = True
                     else:
                         raise ValueError("Subtotals can only be calculated when rows_as_levels=False and corp_var is defined")
-                        
-                
-                # Additional options checks
 
+                # Additional options checks
                 if outmigration:
                     if psa_key=="Base Stratified":
                         raise ValueError("outmigration=True is not possible without PSA restricted data")
@@ -614,12 +615,13 @@ class ChoiceData():
                     weight_var=None
                     
                 if outmigration:
-                    cd_temp = self
+                    cd_temp = self.copy()
                     cd_temp.data = self.data.copy()
-                    cd_temp.restrict_data(cd_temp.data[self.geog_var].isin(psas[psa_key]))
+                    cd_temp.data = cd_temp.data[cd_temp.data[self.geog_var].isin(psas[psa_key])]
                     
                     psa_share = cd_temp.stratify_shares(levels_var, weight_var=weight_var, 
-                                                        corp_var=corp_var, rows_as_levels=True, row_totals=True)
+                                                        corp_var=corp_var, rows_as_levels=True, 
+                                                        row_totals=True, subtotals=subtotals)
                     
                     psa_share = psa_share['Base Stratified']
                     
@@ -633,8 +635,8 @@ class ChoiceData():
                     
                     psa_share['Outmigration_Share'] = psa_share['Outmigration'] / psa_share[new_name]
                     
-                    psa_share = psa_share[[levels_var, 'PSA Total', 'Outmigration', 'Outmigration_Share']]
-                    
+                    psa_share = psa_share[[levels_var, 'PSA Total', name, 'Outmigration', 'Outmigration_Share']]
+                    df = df.drop(columns=[name])
                     df = psa_share.merge(df, how='right', on=levels_var)
     
                 if rows_as_levels:

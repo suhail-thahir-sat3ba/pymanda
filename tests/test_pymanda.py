@@ -28,7 +28,7 @@ def psa_data():
     zips += [2 for x in range(10)] #in 75 psa
     zips += [3 for x in range(8)] #in 75 psa
     zips += [4 for x in range(7)] #in 90 psa
-    zips += [5 for x in range(3)] # in 90 psa
+    zips += [5 for x in range(3)] # out of psa
     zips += [6 for x in range(2)] # out of psa
     #corp y
     zips += [7 for x in range(10)] #in 75 psa
@@ -601,7 +601,7 @@ def test_Stratified_MultipleAxesError(semi_cd_corp, startified_share_count_cols)
         semi_cd_corp.stratify_shares(levels_var="x1", shares_axis=["counts", 1], row_totals=True)
         
 
-def test_ExportStratified_columntotals(semi_cd_corp, startified_share_count_cols):
+def test_Stratified_columntotals(semi_cd_corp, startified_share_count_cols):
     
     test = semi_cd_corp.stratify_shares("x1", shares_axis=['counts', 0], col_totals=True)
 
@@ -638,6 +638,34 @@ def test_Stratified_rowtotals(semi_cd_corp, stratified_share_counts):
     answer['Row Totals'] = answer['Row Totals'].astype("float")
     
     answer = {'Base Stratified': answer}
+    
+    assert dictionary_comparison(test, answer)
+
+def test_Stratified_outmigrations(strat_cd):
+    psa_zips = {'x_0.75': [1,2,3],
+                   'x_0.9': [1,2,3,4]}
+    
+    test = strat_cd.stratify_shares("stratified", rows_as_levels=True, outmigration=True, 
+                                    corp_var=True, subtotals=False, psas=psa_zips)
+    
+    x75 = pd.DataFrame({'stratified': ['Total', 1, 2, 3],
+                        'PSA Total': [46, 17, 12, 17],
+                        'x_counts': [38, 15, 10, 13],
+                        'Outmigration': [8,2,2,4],
+                        'Outmigration_Share': [8/46, 2/17, 2/12, 4/17],
+                        'y_counts': [4,2,2,0],
+                        'z_counts': [4,0,0,4]})
+    
+    x90 = pd.DataFrame({'stratified': ['Total', 1, 2, 3, 4],
+                        'PSA Total': [53, 17, 12, 17, 7],
+                        'x_counts': [45, 15, 10, 13, 7],
+                        'Outmigration': [8,2,2,4, 0],
+                        'Outmigration_Share': [8/53, 2/17, 2/12, 4/17, 0],
+                        'y_counts': [4,2,2,0, 0],
+                        'z_counts': [4,0,0,4, 0]})
+    
+    answer = {'x_0.75' : x75,
+              'x_0.9': x90}
     
     assert dictionary_comparison(test, answer)
 
