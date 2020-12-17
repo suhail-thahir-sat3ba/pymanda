@@ -451,11 +451,21 @@ class ChoiceData():
         corp_var : bool, optional
             Whether to output shares by corp_var level or choice_var level.
             The default is False.
+        psas : dict, optional
+            Optional PSA restrictions to stratify shares on. The default is None.
+        row_totals : bool, optional
+            Whether to calculate row sums. The default is False.
+        col_totals : TYPE, optional
+            Whether to calcuate column totals. The default is True.
+        outmigration : TYPE, optional
+            Whether to add outmigration columns. The default is False.
+        subtotals : TYPE, optional
+            Whether to add corp_var subtotals. The default is True.
 
         Returns
         -------
-        df : pandas.core.frame.DataFrame
-            Corresponding share level to output.
+        output_dict : dict
+            Dictionary of stratified shares with keys identical to psas
 
         """
         
@@ -784,7 +794,7 @@ class ChoiceData():
 
         Parameters
         ----------
-        strat_df : pandas.core.frame.DataFrame
+        strat_dict : dict
             Output from stratified_shares().
         export : Bool, optional
             Boolean to export data. The default is True.
@@ -794,14 +804,10 @@ class ChoiceData():
             Sheet name for export.
         file_path : string, optional
             Destination to export files. The default is None.
-        row_totals : bool, optional
-            Whether to add rowsum totals to export. The default is False.
-        col_totals : bool, optional
-            Whether to add column totals. The default is True.
 
         Returns
         -------
-        strat_df : pandas.core.frame.DataFrame
+        strat_out : dict
             Return output when export=False.
 
         """
@@ -819,8 +825,8 @@ class ChoiceData():
                 self._export(file_path, output_type, strat_df, sheet_name=key)
             else:
                 strat_out.update({key: strat_df})    
-                
-        return strat_out
+        if not export:        
+            return strat_out
      
     def calculate_hhi(self, shares_dict, share_col="count_share", group_col=None):
         """
