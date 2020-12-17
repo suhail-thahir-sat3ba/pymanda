@@ -810,12 +810,10 @@ class ChoiceData():
             
         if type(strat_dict) != dict:
             raise TypeError("strat_df expoected dict. Got {}".format(type(strat_dict)))
- 
         
         strat_out={}
         for key in strat_dict.keys():
             strat_df = strat_dict[key]
-            
 
             if export:
                 self._export(file_path, output_type, strat_df, sheet_name=key)
@@ -823,9 +821,6 @@ class ChoiceData():
                 strat_out.update({key: strat_df})    
                 
         return strat_out
-            
-            
-        
      
     def calculate_hhi(self, shares_dict, share_col="count_share", group_col=None):
         """
