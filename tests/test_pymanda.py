@@ -671,8 +671,8 @@ def test_Stratified_outmigrations(strat_cd):
 
 # Tests for calculate_overlap
 
-def test_OverlapShares(semi_cd_corp):
-    test = semi_cd_corp.calculate_overlap(['u', 'v'], 'x3', overlap_min=50)
+def test_OverlapShares(strat_cd):
+    test = strat_cd.calculate_overlap(['u', 'v'], 'x3', overlap_min=50)
     
     
     return True

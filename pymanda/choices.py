@@ -162,7 +162,7 @@ class ChoiceData():
             if type(alpha) != float:
                 raise TypeError ('''Expected threshold to be type float. Got {}'''.format(type(alpha)))
             if not 0 < alpha <= 1:
-                raise ValueError ('''Threshold value of {} is not between 0 and 1''').format(alpha)
+                raise ValueError ('''Threshold value of {} is not between 0 and 1'''.format(alpha))
         
         df = self.data.copy(deep=True)
         if self.wght_var is None:
@@ -691,7 +691,39 @@ class ChoiceData():
         if df[share_col].sum() != 1:
             raise ValueError ("Values of '{col}' in {d} do not sum to 1".format(col=share_col, d=data))
     
-    def calculate_overlap(self, centers, overlap_var, corp_var=False, threshold=[.75, .9], overlap_min=3, weight_var=None):
+    def calculate_overlap(self, overlap_var, corp_centers=None, choice_centers=None, threshold=[.75, .9], overlap_min=3, weight_var=None):
+        """
+        Calculate PSAs in data restricted to observations that occur more than
+        overlap_min times between 2 choices.
+        
+
+        Parameters
+        ----------
+        overlap_var : str
+            Column to look for overlap in.
+        corp_centers : str, optional
+            Corp-level choices to calculate overlaps for. The default is None.
+        choice_centers : str, optional
+            Choice-level choices to calculate overlap for. The default is None.
+        threshold : list, optional
+            List of thresholds to calculate PSAs for. The default is [.75, .9].
+        overlap_min : int, optional
+            Number of shared occurences of overlap_var between centers to 
+            include in the restricted data. The default is 3.
+        weight_var : str, optional
+            Column with weights for each observation. The default is None.
+
+        Returns
+        -------
+        output_shares : dict
+            PSA shares of centers.
+
+        """
+        if corp_centers is None:
+            corp_centers=[]
+        if choice_centers is None:
+            choice_centers=[]
+        
         df = self.data.copy()
         
         if weight_var is None:
@@ -701,12 +733,17 @@ class ChoiceData():
             df['count'] = 1
             weight_var = 'count'
             reset_weight=True
-            
-        if corp_var:
-            group = [self.corp_var]
-        else:
-            group = [self.choice_var]
-    
+        
+        df['overlap_choice'] = ""
+        group = ['overlap_choice']
+        centers = corp_centers + choice_centers
+        
+        for center in corp_centers:
+            df['overlap_choice'] = np.where(df[self.corp_var].isin([center]), center, df['overlap_choice'])
+        
+        for center in choice_centers:
+            df['overlap_choice'] = np.where(df[self.corp_var].isin([center]), center, df['overlap_choice'])
+        
         df = df.groupby([overlap_var] + group).sum(weight_var)
         df = df[weight_var].unstack()
         df = df[centers]
@@ -721,17 +758,33 @@ class ChoiceData():
         
         cd_df = self.data.copy()
         cd_df = cd_df[cd_df[overlap_var].isin(overlaps)]
-        cd_temp = ChoiceData(cd_df, self.choice_var, corp_var=self.choice_var, wght_var=weight_var, geog_var=self.geog_var)
+        cd_temp = ChoiceData(cd_df, self.choice_var, corp_var=self.corp_var, 
+                             wght_var=weight_var, geog_var=self.geog_var)
         
-        psas = cd_temp.estimate_psa(centers=centers, threshold=threshold)
+        output_shares = {}
+        if len(corp_centers) > 0:
+            psas = cd_temp.estimate_psa(centers=corp_centers, threshold=threshold)
+            shares = cd_temp.calculate_shares(psa_dict=psas, weight_var=weight_var)
+            output_shares.update(shares)
         
-        shares = cd_temp.calculate_shares(psa_dict=psas, weight_var=weight_var)
-        
-        return shares
+        if len(choice_centers) > 0:
+            cd_temp.corp_var = cd_temp.choice_var
+            psas = cd_temp.estimate_psa(centers=choice_centers, threshold=threshold)
+            shares = cd_temp.calculate_shares(psa_dict=psas, weight_var=weight_var)
+            if self.corp_var != self.choice_var:
+                corp_map = self.corp_map()
+                for key in shares.keys():
+                    df = shares[key]
+                    df = corp_map.merge(df, how="right", on=self.choice_var)
+                    shares[key] = df
+                
+            output_shares.update(shares)
+                    
+        return output_shares
 
     def export_shares(self, output_dict, export=True, output_type="excel", file_path=None):
         """
-        Formatting options for calculate_shares() output
+        Formatting options for calculate_shares() and calculate_overlap() output
 
         Parameters
         ----------
@@ -866,6 +919,10 @@ class ChoiceData():
         if not export:        
             return strat_out
      
+    def export_overlap(self, overlap_dict, export=True, output_type="excel", sheet_name="Overlap", file_path=None):
+        
+        return True
+        
     def calculate_hhi(self, shares_dict, share_col="count_share", group_col=None):
         """
         Calculates HHIs from precalculated shares at the corporation level
