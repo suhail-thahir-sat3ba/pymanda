@@ -672,7 +672,7 @@ def test_Stratified_outmigrations(strat_cd):
 # Tests for calculate_overlap
 
 def test_OverlapShares(strat_cd):
-    test = strat_cd.calculate_overlap(['u', 'v'], 'x3', overlap_min=50)
+    test = strat_cd.calculate_overlap('stratified', choice_centers=['a', 'e'])
     
     
     return True

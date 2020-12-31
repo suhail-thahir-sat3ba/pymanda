@@ -691,7 +691,8 @@ class ChoiceData():
         if df[share_col].sum() != 1:
             raise ValueError ("Values of '{col}' in {d} do not sum to 1".format(col=share_col, d=data))
     
-    def calculate_overlap(self, overlap_var, corp_centers=None, choice_centers=None, threshold=[.75, .9], overlap_min=3, weight_var=None):
+    def calculate_overlap(self, overlap_var, corp_centers=None, choice_centers=None, 
+                          threshold=[.75, .9], overlap_min=3, weight_var=None):
         """
         Calculate PSAs in data restricted to observations that occur more than
         overlap_min times between 2 choices.
@@ -719,6 +720,26 @@ class ChoiceData():
             PSA shares of centers.
 
         """
+        
+        if overlap_var not in self.data.columns:
+            raise KeyError("{} is not a column in ChoiceData".format(overlap_var))
+        
+        if type(threshold) != list:
+            threshold=[threshold]
+        
+        for alpha in threshold:
+            if type(alpha) != float:
+                raise TypeError("Values of threshold must be float")
+            if alpha <=0 or alpha >1:
+                raise ValueError("Thresholds must be between 0 and 1")
+                
+        if type(overlap_min) not in [float, int]:
+            raise TypeError("overlap_min must be float or int. Got {}".format(overlap_min))
+        else:
+            if overlap_min <=0:
+                raise ValueError("overlap_min must be greater than 0")
+                
+                
         if corp_centers is None:
             corp_centers=[]
         if choice_centers is None:
@@ -728,6 +749,9 @@ class ChoiceData():
         
         if weight_var is None:
             weight_var= self.wght_var
+        else:
+            if weight_var not in self.data.columns:
+                raise KeyError("specified weight_var is not in ChoiceData")
         
         if weight_var is None:
             df['count'] = 1
@@ -738,11 +762,15 @@ class ChoiceData():
         group = ['overlap_choice']
         centers = corp_centers + choice_centers
         
+        if len(centers) <2:
+            raise ValueError("Atleast 2 total centers must be defined between corp_centers and choice_centers")
+        
+        
         for center in corp_centers:
             df['overlap_choice'] = np.where(df[self.corp_var].isin([center]), center, df['overlap_choice'])
         
         for center in choice_centers:
-            df['overlap_choice'] = np.where(df[self.corp_var].isin([center]), center, df['overlap_choice'])
+            df['overlap_choice'] = np.where(df[self.choice_var].isin([center]), center, df['overlap_choice'])
         
         df = df.groupby([overlap_var] + group).sum(weight_var)
         df = df[weight_var].unstack()
