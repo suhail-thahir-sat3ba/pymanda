@@ -728,7 +728,7 @@ class ChoiceData():
             threshold=[threshold]
         
         for alpha in threshold:
-            if type(alpha) not in [float, int]:
+            if type(alpha) != float:
                 raise TypeError("Values of threshold must be float")
             if alpha <=0 or alpha >1:
                 raise ValueError("Thresholds must be between 0 and 1")
