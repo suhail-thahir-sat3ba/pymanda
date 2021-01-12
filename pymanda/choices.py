@@ -728,7 +728,7 @@ class ChoiceData():
             threshold=[threshold]
         
         for alpha in threshold:
-            if type(alpha) != float:
+            if type(alpha) not in [float, int]:
                 raise TypeError("Values of threshold must be float")
             if alpha <=0 or alpha >1:
                 raise ValueError("Thresholds must be between 0 and 1")
@@ -784,29 +784,32 @@ class ChoiceData():
         if reset_weight:
             weight_var=None
         
-        cd_df = self.data.copy()
-        cd_df = cd_df[cd_df[overlap_var].isin(overlaps)]
-        cd_temp = ChoiceData(cd_df, self.choice_var, corp_var=self.corp_var, 
-                             wght_var=weight_var, geog_var=self.geog_var)
-        
-        output_shares = {}
-        if len(corp_centers) > 0:
-            psas = cd_temp.estimate_psa(centers=corp_centers, threshold=threshold)
-            shares = cd_temp.calculate_shares(psa_dict=psas, weight_var=weight_var)
-            output_shares.update(shares)
-        
-        if len(choice_centers) > 0:
-            cd_temp.corp_var = cd_temp.choice_var
-            psas = cd_temp.estimate_psa(centers=choice_centers, threshold=threshold)
-            shares = cd_temp.calculate_shares(psa_dict=psas, weight_var=weight_var)
-            if self.corp_var != self.choice_var:
-                corp_map = self.corp_map()
-                for key in shares.keys():
-                    df = shares[key]
-                    df = corp_map.merge(df, how="right", on=self.choice_var)
-                    shares[key] = df
-                
-            output_shares.update(shares)
+        if len(overlaps) > 0:
+            cd_df = self.data.copy()
+            cd_df = cd_df[cd_df[overlap_var].isin(overlaps)]
+            cd_temp = ChoiceData(cd_df, self.choice_var, corp_var=self.corp_var, 
+                                 wght_var=weight_var, geog_var=self.geog_var)
+            
+            output_shares = {}
+            if len(corp_centers) > 0:
+                psas = cd_temp.estimate_psa(centers=corp_centers, threshold=threshold)
+                shares = cd_temp.calculate_shares(psa_dict=psas, weight_var=weight_var)
+                output_shares.update(shares)
+            
+            if len(choice_centers) > 0:
+                cd_temp.corp_var = cd_temp.choice_var
+                psas = cd_temp.estimate_psa(centers=choice_centers, threshold=threshold)
+                shares = cd_temp.calculate_shares(psa_dict=psas, weight_var=weight_var)
+                if self.corp_var != self.choice_var:
+                    corp_map = self.corp_map()
+                    for key in shares.keys():
+                        df = shares[key]
+                        df = corp_map.merge(df, how="right", on=self.choice_var)
+                        shares[key] = df
+                    
+                output_shares.update(shares)
+        else:
+            output_shares = "No Overlap"
                     
         return output_shares
 

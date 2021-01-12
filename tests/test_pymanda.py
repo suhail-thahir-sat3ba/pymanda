@@ -672,11 +672,45 @@ def test_Stratified_outmigrations(strat_cd):
 # Tests for calculate_overlap
 
 def test_OverlapShares(strat_cd):
-    test = strat_cd.calculate_overlap('stratified', choice_centers=['a', 'e'])
+    test = strat_cd.calculate_overlap('stratified', choice_centers=['b', 'e'])
     
-    
-    return True
+    answer = {'b_0.75': pd.DataFrame({'corporation': ['x', 'z'],
+                         'choice': ['b', 'e'],
+                         'count': [15, 4],
+                         'count_share': [15 / 19, 4/19]}),
+              'e_0.75': pd.DataFrame({'corporation': ['z'],
+                         'choice': ['e'],
+                         'count': [19],
+                         'count_share': [1.0]}),
+             'b_0.9': pd.DataFrame({'corporation': ['x', 'y', 'z'],
+                         'choice': ['b', 'd', 'e'],
+                         'count': [18, 2, 4],
+                         'count_share': [18 / 24, 2/24, 4/24]}),
+             'e_0.9': pd.DataFrame({'corporation': ['x', 'z'],
+                         'choice': ['b', 'e'],
+                         'count': [8, 23],
+                         'count_share': [8 / 31, 23/31]})
+              }
+    assert dictionary_comparison(test, answer)
 
+def test_EmptyOverlap(strat_cd):
+    test = strat_cd.calculate_overlap('stratified', choice_centers=['b', 'd'])
+    
+    assert test=="No Overlap"
+    
+def test_OverlapShares_overlapmin(strat_cd):
+    test = strat_cd.calculate_overlap('stratified', choice_centers=['b', 'd'], overlap_min=2, threshold=[0.9])
+    
+    answer = {'b_0.9': pd.DataFrame({'corporation': ['x', 'z'],
+                                     'choice': ['b', 'e'],
+                                     'count': [8,4],
+                                     'count_share': [2/3, 1/3]}),
+              'd_0.9': pd.DataFrame({'corporation': ['y'],
+                                     'choice': ['d'],
+                                     'count': [2],
+                                     'count_share': [1.0]})}
+
+    assert dictionary_comparison(test, answer)
 # Tests for DiscreteChoice
 @pytest.fixture
 def semi_cd():
