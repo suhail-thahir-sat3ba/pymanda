@@ -39,9 +39,5 @@ jobs:
     - name: Test with pytest
       run: |
         pip install pytest
-        pytest --cov=pymanda
-    - name: Coveralls
-      uses: coverallsapp/github-action@master
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        
+        pip install pytest-cov
+        pytest --cov=pymanda/
